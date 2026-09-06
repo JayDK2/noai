@@ -21,3 +21,13 @@ no interest in re-asserting a judgement its own source declines to make.
 
 **eye-wave/spotify-ai-blocklist** is not used. It is GPL-3.0 and contributes only
 56 identifiers that are not already in the set above.
+
+## A licence condition, not a preference
+
+NoAI does not accept money — no donation link, no paid tier, no sponsorship.
+
+That is currently a choice, but it becomes binding the moment any data licensed
+CC BY-NC is added: "NonCommercial" means "not primarily intended for or directed
+towards commercial advantage or monetary compensation" (CC BY-NC 4.0 §1(i)), and
+a donation button next to NC-licensed data is genuinely arguable as monetary
+compensation. If money ever enters, the NC-licensed data has to come out first.
