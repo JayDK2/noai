@@ -23,3 +23,16 @@ to GitHub, as any web request does.
 **Do not:** put "Spotify" in the extension name; repeat "Spotify" across
 localised descriptions (Blockify was removed for keyword density); use Spotify
 green (#1DB954), circles or wave motifs in the icon.
+
+## Added in 0.4.0
+
+- `scripting` — Used only to register the image-scanning content script after the
+  user grants the optional site permission, and to unregister it when they turn
+  the feature off. It injects one bundled script; nothing is downloaded or evaluated.
+- `<all_urls>` is an **optional** permission, not requested at install. The default
+  installation asks only for Spotify Web and YouTube. The user grants site access
+  from the popup when enabling Content Credentials, and revoking it switches the
+  feature off automatically.
+
+Single purpose is unchanged: one filter for content reported or declared as
+AI-generated, applied where the user browses.

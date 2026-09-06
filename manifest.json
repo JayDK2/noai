@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "NoAI — AI Content Filter",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Dims tracks and videos reported as AI-generated on the Spotify web player and YouTube, using community-maintained lists.",
   "permissions": [
     "storage",
-    "alarms"
+    "alarms",
+    "scripting"
   ],
   "host_permissions": [
     "https://raw.githubusercontent.com/JayDK2/noai/*"
@@ -54,5 +55,8 @@
       ],
       "run_at": "document_idle"
     }
+  ],
+  "optional_host_permissions": [
+    "<all_urls>"
   ]
 }

@@ -27,8 +27,76 @@ const standard = () => ({
   hide: false,          // graaton (false) vs skjul (true)
   allowlist: [],        // kunstner-id er brugeren aldrig vil filtrere
   allowNames: {},       // id -> navn, kun saa listen er laeselig i popup en
+  c2pa: false,          // billed-scanning kraever <all_urls> - brugeren taender selv
   stats: { skipped: 0 },
 });
+
+// --- Content Credentials (C2PA) -------------------------------------------
+// Vi laeser billedets EGEN erklaering, ikke et gaet. Manifestet ligger som JUMBF
+// i filen, og de noegler vi skal bruge staar som ren tekst i bytene (verificeret
+// mod en spec-korrekt fil signeret med c2patool). Vi validerer IKKE signaturen:
+// det kraever et helt bibliotek og en certifikatkaede, og en forfalsket erklaering
+// om at noget ER AI er ikke et angreb nogen har interesse i at udfoere.
+
+// Billed-scanning kraever adgang til alle websites. Den tilladelse beder vi IKKE
+// om ved installation - den er valgfri, brugeren giver den fra popup en, og
+// indholds-scriptet registreres foerst derefter. En standardinstallation af NoAI
+// beder altsaa kun om adgang til Spotify og YouTube.
+const C2PA_SCRIPT_ID = "noai-c2pa";
+
+async function opdatérC2paScript() {
+  const { c2pa } = await get("c2pa");
+  const harLov = await chrome.permissions.contains({ origins: ["<all_urls>"] });
+  const skalKoere = !!c2pa && harLov;
+  let registreret = false;
+  try {
+    const nu = await chrome.scripting.getRegisteredContentScripts({ ids: [C2PA_SCRIPT_ID] });
+    registreret = nu.length > 0;
+  } catch (e) { registreret = false; }
+  try {
+    if (skalKoere && !registreret) {
+      await chrome.scripting.registerContentScripts([{
+        id: C2PA_SCRIPT_ID,
+        matches: ["http://*/*", "https://*/*"],
+        js: ["src/content-c2pa.js"],
+        css: ["src/content-c2pa.css"],
+        runAt: "document_idle",
+      }]);
+    } else if (!skalKoere && registreret) {
+      await chrome.scripting.unregisterContentScripts({ ids: [C2PA_SCRIPT_ID] });
+    }
+  } catch (e) { /* en fejlet registrering maa ikke vaelte resten */ }
+  return skalKoere;
+}
+
+const C2PA_BYTES = 262144;     // foerste 256 KB - manifestet ligger foran billeddata
+const C2PA_CACHE_MAX = 500;
+const c2paCache = new Map();
+
+const AI_MARKOERER = ["trainedAlgorithmicMedia", "compositeWithTrainedAlgorithmicMedia"];
+
+async function c2paTjek(url) {
+  if (c2paCache.has(url)) return c2paCache.get(url);
+  let dom = "none";
+  try {
+    // force-cache rammer browserens egen cache, saa vi som regel IKKE laver et
+    // ekstra netvaerkskald for et billede siden allerede har hentet.
+    const r = await fetch(url, { cache: "force-cache", headers: { Range: "bytes=0-" + (C2PA_BYTES - 1) } });
+    if (r.ok || r.status === 206) {
+      const buf = await r.arrayBuffer();
+      if (buf.byteLength <= C2PA_BYTES * 2) {
+        const tekst = new TextDecoder("latin1").decode(new Uint8Array(buf));
+        if (tekst.includes("jumdc2pa")) {
+          dom = AI_MARKOERER.some((m) => tekst.includes(m)) ? "ai"
+              : tekst.includes("digitalCapture") ? "camera" : "credentials";
+        }
+      }
+    }
+  } catch (e) { dom = "none"; }
+  if (c2paCache.size >= C2PA_CACHE_MAX) c2paCache.delete(c2paCache.keys().next().value);
+  c2paCache.set(url, dom);
+  return dom;
+}
 
 const get = (k) => chrome.storage.local.get(k);
 const set = (o) => chrome.storage.local.set(o);
@@ -193,13 +261,31 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
         const liste = await sikrListe();
         const { lastError, skipStopped, selectorTrouble } = await get(["lastError", "skipStopped", "selectorTrouble"]);
         svar({
-          ...i, ids: liste.ids,
+          ...i, c2pa: !!i.c2pa, ids: liste.ids,
           listMeta: { generated_at: liste.generated_at, count: liste.ids.length,
                       origin: liste.origin, source: liste.source },
           lastError: lastError || null,
           skipStopped: skipStopped || null,
           selectorTrouble: selectorTrouble || null,
         });
+        break;
+      }
+      case "c2paEnabled": {
+        const i = await indstillinger();
+        svar({ enabled: !!i.c2pa });
+        break;
+      }
+      case "c2paPermission": {
+        svar({ granted: await chrome.permissions.contains({ origins: ["<all_urls>"] }) });
+        break;
+      }
+      case "c2pa": {
+        const i = await indstillinger();
+        if (!i.c2pa || typeof msg.url !== "string" || !/^https?:/.test(msg.url)) {
+          svar({ verdict: "none" });
+          break;
+        }
+        svar({ verdict: await c2paTjek(msg.url) });
         break;
       }
       case "ytState": {
@@ -227,8 +313,9 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
         break;
       }
       case "setOption": {
-        const tilladt = ["enabled", "skip", "hide", "allowlist", "allowNames"];
+        const tilladt = ["enabled", "skip", "hide", "allowlist", "allowNames", "c2pa"];
         if (tilladt.includes(msg.key)) await set({ [msg.key]: msg.value });
+        if (msg.key === "c2pa") await opdatérC2paScript();
         svar({ ok: true });
         break;
       }
@@ -245,8 +332,16 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
 
 const planlaeg = () => chrome.alarms.create(ALARM, { periodInMinutes: REFRESH_MIN, delayInMinutes: 1 });
 
+chrome.permissions.onRemoved.addListener(async () => {
+  // Traekker brugeren adgangen tilbage i browserens egne indstillinger, skal
+  // funktionen slukke af sig selv - ikke staa og fejle i det stille.
+  await set({ c2pa: false });
+  await opdatérC2paScript();
+});
+
 chrome.runtime.onInstalled.addListener(async () => {
-  planlaeg();                       // alarmen foerst - den maa aldrig kunne tabes
+  planlaeg();
+  await opdatérC2paScript();                       // alarmen foerst - den maa aldrig kunne tabes
   try { await sikrListe(); } catch (e) {
     await set({ lastError: { when: new Date().toISOString(), msg: "seed: " + e.message } });
   }
@@ -257,6 +352,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 chrome.runtime.onStartup.addListener(async () => {
   planlaeg();
+  await opdatérC2paScript();
   await sikrListe();
   await sikrYtListe();
   // alarmer fyrer ikke mens browseren er lukket - tjek selv om listen er gammel

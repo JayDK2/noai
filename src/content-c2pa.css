@@ -1,0 +1,20 @@
+/* Maerket paa et billede med AI-erklaering. Skal kunne ses uden at oedelaegge
+   siden, og ordlyden skal goere klart at det er billedet der siger det. */
+.noai-c2pa-mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 2147482000;
+  padding: 2px 7px;
+  border-radius: 0 0 3px 0;
+  background: #0a0806;
+  color: #ffb454;
+  font: 600 10px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  pointer-events: none;
+  white-space: nowrap;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

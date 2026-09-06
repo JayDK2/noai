@@ -36,6 +36,20 @@ are never touched.
 A channel's own page is covered too: the cards there do not repeat the channel
 link, so the handle is read from the URL instead.
 
+## Content Credentials, everywhere else
+
+Off by default; turning it on asks for permission to run on every site.
+
+Some tools write a **Content Credential** into the image file itself, declaring
+how it was made. Where that declaration says AI, NoAI marks the image — on any
+site, not just the two above.
+
+This is the whole philosophy in one feature: NoAI has no AI detector and never
+will. It reads what the file says about itself, and says so in those words —
+*declared by the file*, not *proven*. Signature verification would need a full
+C2PA library and a certificate chain, and a forged claim that something **is**
+AI is not an attack anyone has reason to mount.
+
 ## Known limits
 
 Honest ones, because they are the reason for the defaults:

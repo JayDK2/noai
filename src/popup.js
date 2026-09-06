@@ -26,6 +26,7 @@ function advarsel() {
 
 function tegn() {
   $("enabled").checked = state.enabled;
+  $("c2pa").checked = !!state.c2pa;
   $("skip").checked = state.skip;
   $("hide").checked = state.hide;
   $("s-skipped").textContent = (state.stats && state.stats.skipped) || 0;
@@ -62,6 +63,22 @@ function tegn() {
 }
 
 async function indlaes() { state = await send({ type: "state" }); tegn(); }
+
+// Billed-scanning kraever adgang til alle websites, og den beder vi foerst om her
+// - ikke ved installation. Siger brugeren nej i browserens dialog, ruller kontakten
+// tilbage i stedet for at staa taendt uden at kunne noget.
+$("c2pa").addEventListener("change", async (e) => {
+  if (e.target.checked) {
+    let fik = false;
+    try { fik = await chrome.permissions.request({ origins: ["<all_urls>"] }); }
+    catch (err) { fik = false; }
+    if (!fik) { e.target.checked = false; return; }
+  } else {
+    try { await chrome.permissions.remove({ origins: ["<all_urls>"] }); } catch (err) {}
+  }
+  await send({ type: "setOption", key: "c2pa", value: e.target.checked });
+  indlaes();
+});
 
 for (const k of ["enabled", "skip", "hide"]) {
   $(k).addEventListener("change", async (e) => {
