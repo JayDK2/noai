@@ -31,3 +31,11 @@ CC BY-NC is added: "NonCommercial" means "not primarily intended for or directed
 towards commercial advantage or monetary compensation" (CC BY-NC 4.0 §1(i)), and
 a donation button next to NC-licensed data is genuinely arguable as monetary
 compensation. If money ever enters, the NC-licensed data has to come out first.
+
+## The data is not covered by the code licence
+
+The MIT licence in [LICENSE](LICENSE) covers the code in this repository. The
+artist identifiers in `blocklist.json` are not ours: they originate from
+CennoxX/spotify-ai-blocker under the MIT License, with attribution to Soul Over
+AI under CC BY 4.0. Those terms travel with the data regardless of how the code
+is licensed. Full texts are in [`LICENSES/`](LICENSES/).
