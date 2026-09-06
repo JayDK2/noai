@@ -1,0 +1,74 @@
+name: mirror blocklist
+
+# Vi henter IKKE direkte fra CennoxX i extensionen. Vi spejler hertil foerst.
+# Grunden er ikke mistillid til ham - det er at et loefte om at fjerne en
+# kunstner der klager kraever at vi ejer den fil brugerne henter. Uden dette
+# skridt er "report a mistake" en formular uden noget bag.
+
+on:
+  schedule:
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Hent, kontrollér og træk tilbagetrækninger fra
+        run: |
+          python3 - <<'PY'
+          import csv, io, json, os, re, sys, urllib.request
+          from datetime import datetime, timezone
+
+          SRC = "https://raw.githubusercontent.com/CennoxX/spotify-ai-blocker/main/SpotifyAiArtists.csv"
+          ID = re.compile(r"^[A-Za-z0-9]{22}$")
+
+          raw = urllib.request.urlopen(SRC, timeout=90).read()
+          if len(raw) > 4_000_000:
+              sys.exit("kilden er urimeligt stor: %d bytes" % len(raw))
+          text = raw.decode("utf-8", "replace")
+          if text.lstrip()[:1] == "<":
+              sys.exit("fik HTML, ikke CSV - fejlside serveret som 200?")
+
+          ids = sorted({r[-1].strip() for r in csv.reader(io.StringIO(text))
+                        if r and ID.match(r[-1].strip())})
+          if len(ids) < 1000:
+              sys.exit("kun %d id'er - afbryder" % len(ids))
+
+          # +/- 10 %-baand mod trunkering og mod masse-indsprojtning
+          if os.path.exists("blocklist.json"):
+              gammel = json.load(open("blocklist.json"))["ids"]
+              if gammel and not (0.9 <= len(ids) / len(gammel) <= 1.1):
+                  sys.exit("bevaegelse uden for +/-10 %%: %d -> %d. Kraever et menneske."
+                           % (len(gammel), len(ids)))
+
+          fjernet = set()
+          if os.path.exists("mirror/retracted.csv"):
+              for line in open("mirror/retracted.csv"):
+                  line = line.split("#")[0].strip()
+                  if ID.match(line):
+                      fjernet.add(line)
+          ids = [i for i in ids if i not in fjernet]
+
+          json.dump({
+              "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "source": "CennoxX/spotify-ai-blocker",
+              "retracted": len(fjernet),
+              "count": len(ids),
+              "ids": ids,
+          }, open("blocklist.json", "w"), separators=(",", ":"))
+          print("%d id'er (%d trukket tilbage)" % (len(ids), len(fjernet)))
+          PY
+
+      - name: Commit hvis der er noget nyt
+        run: |
+          git config user.name "noai-mirror"
+          git config user.email "noai-mirror@users.noreply.github.com"
+          git add blocklist.json
+          git diff --staged --quiet || git commit -m "blocklist: $(python3 -c "import json;print(json.load(open('blocklist.json'))['count'])") artists"
+          git push

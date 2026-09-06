@@ -1,0 +1,35 @@
+/* Graatoning: skal kunne ses uden at vaere farve alene, derfor ogsaa tekst-maerket. */
+[data-testid="tracklist-row"].noai-flagged {
+  opacity: .38;
+  position: relative;
+}
+[data-testid="tracklist-row"].noai-hidden { display: none !important; }
+
+.noai-mark {
+  position: absolute;
+  right: 12px;
+  bottom: 2px;
+  font-size: 10px;
+  line-height: 1.4;
+  letter-spacing: .02em;
+  color: #d9b25f;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+#noai-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 108px;
+  transform: translateX(-50%);
+  z-index: 2147483000;
+  max-width: 420px;
+  padding: 10px 16px;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  background: #101010;
+  color: #e8e8e8;
+  font: 13px/1.4 -apple-system, system-ui, sans-serif;
+  visibility: hidden;
+}
+#noai-toast.noai-vis { visibility: visible; }

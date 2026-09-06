@@ -1,0 +1,20 @@
+Attribution under Creative Commons Attribution 4.0 International (CC BY 4.0)
+
+  Project:  Soul Over AI
+  Link:     https://souloverai.com
+  Licence:  https://creativecommons.org/licenses/by/4.0/
+  Changes:  Yes. Changes were made. Soul Over AI's artist entries are not
+            consumed directly by this extension. Its identifiers are contained
+            within the CennoxX/spotify-ai-blocker set that NoAI does use, and
+            that set carries only artist identifiers - Soul Over AI's
+            additional fields, including its per-artist "disclosure"
+            confidence rating, are not present.
+
+Soul Over AI was archived by its maintainers and its data has not changed
+since 2026-02-16. NoAI does not fetch from it. This attribution is given
+because its identifiers may reach users through the merged upstream set.
+
+Note on confidence: in Soul Over AI's own published data, 70 % of entries
+carried disclosure "none" - meaning no public disclosure of AI use was
+recorded - and only 1.5 % were marked "full". NoAI therefore describes
+entries as "reported as AI-generated", never as confirmed.
