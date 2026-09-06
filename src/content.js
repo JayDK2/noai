@@ -177,6 +177,12 @@
     if (!ids.length) { nuSpiller(null); return faerdig(); }
     nuSpiller(ids);
     if (!flaget(ids)) { sammenhaengende = 0; return faerdig(); }
+    {
+      const ramt = ids.filter((i) => state.ids.has(i) && !state.allow.has(i));
+      const w = document.querySelector(SEL.widget);
+      const navne = w ? [...w.querySelectorAll(SEL.widgetArtist)].map((a) => a.textContent.trim()) : [];
+      chrome.storage.local.set({ senestFlaget: { kilde: "spotify", id: ramt[0], navn: navne[0] || "" } });
+    }
     if (!state.skip) return faerdig();
     if (sammenhaengende >= SKIP_LOFT) {
       chrome.storage.local.set({ skipStopped: { at: Date.now(), after: SKIP_LOFT } });
@@ -244,6 +250,24 @@
         m.className = "noai-mark";
         m.textContent = "reported as AI-generated";   // rigtig tekst, ikke kun farve
         r.appendChild(m);
+        // Registrér hvad brugeren SER flaget, ikke kun hvad der spiller. Ellers kan
+        // indberetningen kun udfyldes hvis der tilfaeldigvis koerer musik.
+        if (ids.length) {
+          // Navnet skal komme fra KUNSTNER-linket. Raekkens anden tekstlinje er
+          // nummerets titel, ikke kunstneren - det ville udfylde indberetningen
+          // med noget der ser rigtigt ud og er forkert.
+          const kl = [...r.querySelectorAll('a[href^="/artist/"]')]
+            .find((x) => artistId(x.getAttribute("href")) === ids[0]);
+          // Paa en artist-side har raekkerne ingen kunstner-links overhovedet -
+          // id et kom fra URL en - saa navnet maa tages fra sidens overskrift.
+          // "main h1", ikke bare "h1": sidens FOERSTE h1 er sidebjaelkens "Your
+          // Library". Et forkert navn i en indberetning er vaerre end intet navn.
+          const h1 = ids[0] === sideId ? document.querySelector("main h1") : null;
+          chrome.storage.local.set({
+            senestFlaget: { kilde: "spotify", id: ids[0],
+                            navn: kl ? kl.textContent.trim()
+                                : h1 ? h1.textContent.trim() : "" } });
+        }
       } else if (!flag && mrk) { mrk.remove(); }
     }
   }
@@ -326,7 +350,10 @@
 
   chrome.storage.onChanged.addListener((c, omraade) => {
     if (doed) return;
-    if (omraade === "local" && (c.enabled || c.skip || c.hide || c.allowlist || c.blocklist))
+    // killSwitch SKAL med: noed-kontakten skriver den noegle, ikke "enabled", og
+    // uden den her ville en fjernstyret standsning ikke naa siden overhovedet.
+    if (omraade === "local" &&
+        (c.enabled || c.skip || c.hide || c.allowlist || c.blocklist || c.killSwitch))
       hentState();
   });
 

@@ -42,6 +42,24 @@ const standard = () => ({
 // om ved installation - den er valgfri, brugeren giver den fra popup en, og
 // indholds-scriptet registreres foerst derefter. En standardinstallation af NoAI
 // beder altsaa kun om adgang til Spotify og YouTube.
+// --- noed-kontakt ---------------------------------------------------------
+// Omdoeber Spotify eller YouTube én krog saa filteret pludselig flager ALT, har vi
+// ellers ingen maade at stoppe det paa: en Web Store-opdatering tager dage, og
+// imens ser hver bruger hele sit bibliotek graatone. Vi henter allerede en fil vi
+// selv ejer hver sjette time - saa den fil kan ogsaa baere et stopsignal.
+//
+// Kontakten SLUKKER kun. Den kan ikke taende noget, ikke aendre adfaerd og ikke
+// naa andet end den ene tilstand. Det er med vilje: en fjernstyret kontakt der kan
+// mere end at slaa fra, er en angrebsflade.
+
+async function noedKontakt(liste) {
+  const stop = liste && liste.disabled === true;
+  const { killSwitch } = await get("killSwitch");
+  const var_ = !!(killSwitch && killSwitch.active);
+  if (stop === var_) return;
+  await set({ killSwitch: stop ? { active: true, at: Date.now(), reason: String(liste.disabled_reason || "") } : null });
+}
+
 const C2PA_SCRIPT_ID = "noai-c2pa";
 
 async function opdatérC2paScript() {
@@ -201,6 +219,7 @@ async function opdatérYt() {
       frisk.origin = "mirror";
       frisk.fetched_at = new Date().toISOString();
       await set({ ytlist: frisk, ytError: null });
+      await noedKontakt(frisk);
       return { ok: true, count: frisk.block.length + frisk.warn.length };
     } catch (e) {
       await set({ ytError: { when: new Date().toISOString(), msg: String(e.message || e) } });
@@ -232,6 +251,7 @@ async function opdatér() {
       // liste et gulv, og en kunstner der er fjernet hos kilden forbliver flaget for
       // evigt. Det braekker retten til berigtigelse.
       await set({ blocklist: frisk, lastError: null });
+      await noedKontakt(frisk);
       return { ok: true, count: frisk.ids.length };
     } catch (e) {
       // beholder sidste gode liste - en fejlet hentning er ikke en tom liste
@@ -278,11 +298,16 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
       case "state": {
         const i = await indstillinger();
         const liste = await sikrListe();
+        const { killSwitch } = await get("killSwitch");
         const { lastError, skipStopped, selectorTrouble, ytError } =
           await get(["lastError", "skipStopped", "selectorTrouble", "ytError"]);
         const ytListe = await sikrYtListe();
         svar({
-          ...i, c2pa: !!i.c2pa, ids: liste.ids,
+          ...i,
+          // En aktiv noed-kontakt slaar filteret fra, uanset brugerens indstilling.
+          enabled: i.enabled && !(killSwitch && killSwitch.active),
+          killSwitch: killSwitch || null,
+          c2pa: !!i.c2pa, ids: liste.ids,
           listMeta: { generated_at: liste.generated_at, count: liste.ids.length,
                       origin: liste.origin, source: liste.source },
           lastError: lastError || null,
@@ -315,8 +340,9 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
       case "ytState": {
         const i = await indstillinger();
         const liste = await sikrYtListe();
+        const { killSwitch: ks } = await get("killSwitch");
         svar({
-          enabled: i.enabled, hide: i.hide, allowlist: i.allowlist,
+          enabled: i.enabled && !(ks && ks.active), hide: i.hide, allowlist: i.allowlist,
           block: liste.block, warn: liste.warn,
           meta: { generated_at: liste.generated_at, source: liste.source,
                   origin: liste.origin, count: liste.block.length + liste.warn.length },

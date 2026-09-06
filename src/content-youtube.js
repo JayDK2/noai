@@ -78,7 +78,18 @@
   }
 
   function rens() {
-    if (!state || !state.enabled) return;
+    if (!state) return;
+    if (!state.enabled) {
+      // Ryd op frem for at returnere. Ellers ville en fjernstyret standsning
+      // efterlade alle maerker staaende paa siden, som om intet var sket.
+      for (const k of document.querySelectorAll("[data-noai]")) {
+        k.removeAttribute("data-noai");
+        k.classList.remove("noai-yt-block", "noai-yt-warn", "noai-yt-hidden");
+        const m = k.querySelector(".noai-yt-mark");
+        if (m) m.remove();
+      }
+      return;
+    }
     const kort = document.querySelectorAll(KORT);
     if (!kort.length) return;
     let medLink = 0;
@@ -114,6 +125,10 @@
         // 21.000 kanaler fra en faellesliste ER der falske positive. Eneste alternativ
         // ville vaere at slukke hele funktionen.
         m.title = "Reported by a community list. Click to never filter " + h + " again.";
+        // Gem hvad brugeren ser flaget lige nu, saa popup ens indberetning kan
+        // udfyldes med det. Uden det kan en bruger ikke vide HVAD der skal skrives -
+        // og saa er berigtigelsen kun reel i robotten, ikke i produktet.
+        chrome.storage.local.set({ senestFlaget: { kilde: "youtube", id: h, niveau } });
         m.addEventListener("click", async (e) => {
           e.preventDefault(); e.stopPropagation();
           const s2 = await send({ type: "ytState" });
@@ -159,7 +174,8 @@
 
   chrome.storage.onChanged.addListener((c, omraade) => {
     if (doed) return;
-    if (omraade === "local" && (c.enabled || c.hide || c.allowlist || c.ytlist)) hentState();
+    if (omraade === "local" &&
+        (c.enabled || c.hide || c.allowlist || c.ytlist || c.killSwitch)) hentState();
   });
 
   document.addEventListener("visibilitychange", planlaeg);

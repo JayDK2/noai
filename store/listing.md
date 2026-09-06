@@ -65,3 +65,13 @@ green (#1DB954), circles or wave motifs in the icon.
 
 Single purpose is unchanged: one filter for content reported or declared as
 AI-generated, applied where the user browses.
+
+## Privacy policy URL (required field)
+
+https://h1tmakers.com/noai/privacy.html
+
+Hosted as a plain web page on a domain the author controls, not as a file in the
+repository. A markdown blob in a git repo is technically public but not findable:
+an artist searching for their own name will never land on it, and Art. 14(5)(b)
+asks for information the data subject can actually reach. The repository copy
+remains the source the page is generated from.

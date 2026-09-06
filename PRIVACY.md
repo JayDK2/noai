@@ -1,5 +1,8 @@
 # NoAI — privacy
 
+*Published at https://h1tmakers.com/noai/privacy.html — that page is the canonical version, and the one linked from
+the Chrome Web Store listing and from the extension. This file is its source.*
+
 Three different groups of people appear here, and they need different answers.
 **You, the user** come first. Then **the musicians and the YouTube channels
 named in the filter lists** — they are not users of this extension, never agreed
@@ -153,9 +156,10 @@ We obtained this data from public third-party sources, not from you. Notifying
 each of roughly 29,000 people individually is not possible with what we hold —
 the sources carry no contact details. Under Art. 14(5)(b) we therefore make this
 information publicly available instead, which is what this page is. It is
-published at a public address, linked from the Chrome Web Store listing, from
-the extension itself, and from the repository, so it can be found without
-installing anything.
+published as an ordinary web page at https://h1tmakers.com/noai/privacy.html — linked from the Chrome Web Store
+listing, from the extension itself, and from the repository — so an artist or
+channel owner searching for their own name can find it without installing
+anything, and without needing to read a file in a code repository.
 
 You have the right to complain to a supervisory authority. In Denmark that is
 Datatilsynet, https://www.datatilsynet.dk.

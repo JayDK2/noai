@@ -16,6 +16,10 @@ function advarsel() {
   // ikke, og uden denne besked ville brugeren aldrig faa det at vide.
   // NB: pr. site. Med én faelles noegle slettede en sund YouTube-fane en levende
   // Spotify-fejlmelding, og vagten sagde stort set altid "alt vel".
+  if (state.killSwitch && state.killSwitch.active)
+    return "Filtering is paused remotely because the list source has a problem" +
+           (state.killSwitch.reason ? ": " + state.killSwitch.reason : "") +
+           ". It resumes automatically when the problem is fixed.";
   const st = state.selectorTrouble;
   if (st && (st.spotify || st.youtube)) {
     const dele = [];
@@ -123,3 +127,37 @@ $("add").addEventListener("click", async () => {
 });
 
 indlaes();
+
+// "Report a mistake" var et link til en TOM formular. En bruger kan ikke vide
+// hvilket 22-tegns-id eller hvilket @haandtag der skal naevnes, og en YouTube-kanal
+// kunne slet ikke indberettes. Vi udfylder den med det brugeren sidst saa flaget.
+async function opdaterRapportLink() {
+  const a = document.querySelector('a[href*="/issues"]');
+  if (!a) return;
+  const { senestFlaget: f } = await chrome.storage.local.get("senestFlaget");
+  const base = "https://github.com/JayDK2/noai/issues/new";
+  if (!f || !f.id) { a.href = base + "?title=" + encodeURIComponent("Wrongly flagged"); return; }
+  const erYt = f.kilde === "youtube";
+  const hvem = erYt ? f.id : (f.navn ? f.navn + " (" + f.id + ")" : f.id);
+  const krop = [
+    "**What is wrongly flagged**",
+    "",
+    erYt ? "YouTube channel: " + f.id : "Spotify artist: " + hvem,
+    erYt ? "Currently on the " + (f.niveau === "warn" ? "warn" : "block") + " list." : "",
+    "",
+    "**Why it is wrong**",
+    "",
+    "<!-- A sentence is enough. No proof is required. -->",
+    "",
+    "---",
+    "If you are the artist or channel owner, you can also write to noAI@h1tmakers.com.",
+    "We remove on request, without conditions, and it reaches every installation",
+    "within six hours. YouTube channels can also ask to be moved from the block list",
+    "to the warn list instead of removed entirely.",
+  ].join("\n");
+  a.href = base + "?title=" + encodeURIComponent("Wrongly flagged: " + hvem) +
+           "&body=" + encodeURIComponent(krop);
+  a.textContent = "Report " + (hvem.length > 22 ? hvem.slice(0, 22) + "\u2026" : hvem);
+}
+
+opdaterRapportLink();
