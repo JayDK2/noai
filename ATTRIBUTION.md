@@ -51,8 +51,14 @@ compensation. If money ever enters, the NC-licensed data has to come out first.
 
 ## The data is not covered by the code licence
 
-The MIT licence in [LICENSE](LICENSE) covers the code in this repository. The
-artist identifiers in `blocklist.json` are not ours: they originate from
-CennoxX/spotify-ai-blocker under the MIT License, with attribution to Soul Over
-AI under CC BY 4.0. Those terms travel with the data regardless of how the code
-is licensed. Full texts are in [`LICENSES/`](LICENSES/).
+The MIT licence in [LICENSE](LICENSE) covers **the code in this repository and
+nothing else**. The data files are not ours and are not MIT:
+
+| File | Origin | Licence |
+|---|---|---|
+| `blocklist.json` | CennoxX/spotify-ai-blocker | MIT, with attribution to Soul Over AI under CC BY 4.0 |
+| `youtube.json` | Override92/AiSList | **CC BY-NC 4.0 — non-commercial only** |
+
+Those terms travel with the data regardless of how the code is licensed. In
+particular, **`youtube.json` may not be used commercially by anyone**, including
+downstream users of this repository. Full texts are in [`LICENSES/`](LICENSES/).

@@ -15,6 +15,7 @@
     repeat: "[data-testid=\"control-button-repeat\"]",
     position: "[data-testid=\"playback-position\"]",
     row: "[data-testid=\"tracklist-row\"]",
+    bar: "[data-testid=\"now-playing-bar\"]",
   };
 
   const SKIP_LOFT = 15;        // sammenhaengende skip foer vi stopper og siger til
@@ -256,7 +257,7 @@
     const n = brudte.join(",");
     if (n === sidsteSvigt) return;
     sidsteSvigt = n;
-    send({ type: "selectors", broken: brudte });
+    send({ type: "selectors", site: "spotify", broken: brudte });
   }
 
   // --- kunstner-links uden for nummer-raekker --------------------------------

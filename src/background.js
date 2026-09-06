@@ -73,28 +73,47 @@ const C2PA_BYTES = 262144;     // foerste 256 KB - manifestet ligger foran bille
 const C2PA_CACHE_MAX = 500;
 const c2paCache = new Map();
 
-const AI_MARKOERER = ["trainedAlgorithmicMedia", "compositeWithTrainedAlgorithmicMedia"];
+// compositeWith... INDEHOLDER trainedAlgorithmicMedia som delstreng, saa den skal
+// proeves foerst - ellers er den anden post doed kode, og vi taber en skelnen
+// specifikationen giver os gratis: "helt genereret" er ikke det samme som
+// "indeholder AI-elementer", og brugeren bryder sig om forskellen.
+const AI_KOMPOSIT = "compositeWithTrainedAlgorithmicMedia";
+const AI_HELT = "trainedAlgorithmicMedia";
 
 async function c2paTjek(url) {
   if (c2paCache.has(url)) return c2paCache.get(url);
   let dom = "none";
+  let fejlede = false;
   try {
     // force-cache rammer browserens egen cache, saa vi som regel IKKE laver et
     // ekstra netvaerkskald for et billede siden allerede har hentet.
-    const r = await fetch(url, { cache: "force-cache", headers: { Range: "bytes=0-" + (C2PA_BYTES - 1) } });
+    // credentials: "omit" er eksplicit med vilje. Standarden ("same-origin") ville
+    // beskytte os her ved et tilfaelde, og en privatlivspaastand der hviler paa en
+    // implicit standard er én omskrivning fra at braekke i stilhed.
+    const r = await fetch(url, {
+      cache: "force-cache",
+      credentials: "omit",
+      headers: { Range: "bytes=0-" + (C2PA_BYTES - 1) },
+    });
     if (r.ok || r.status === 206) {
       const buf = await r.arrayBuffer();
       if (buf.byteLength <= C2PA_BYTES * 2) {
         const tekst = new TextDecoder("latin1").decode(new Uint8Array(buf));
         if (tekst.includes("jumdc2pa")) {
-          dom = AI_MARKOERER.some((m) => tekst.includes(m)) ? "ai"
+          dom = tekst.includes(AI_KOMPOSIT) ? "ai-composite"
+              : tekst.includes(AI_HELT) ? "ai"
               : tekst.includes("digitalCapture") ? "camera" : "credentials";
         }
       }
     }
-  } catch (e) { dom = "none"; }
-  if (c2paCache.size >= C2PA_CACHE_MAX) c2paCache.delete(c2paCache.keys().next().value);
-  c2paCache.set(url, dom);
+  } catch (e) { fejlede = true; }
+  // En 429, en timeout eller et 403 (hotlink-vaern, udloebne signerede URL er) maa
+  // IKKE cementeres som "ingen credentials" for workerens levetid. Vi cacher kun
+  // rigtige svar.
+  if (!fejlede) {
+    if (c2paCache.size >= C2PA_CACHE_MAX) c2paCache.delete(c2paCache.keys().next().value);
+    c2paCache.set(url, dom);
+  }
   return dom;
 }
 
@@ -259,12 +278,17 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
       case "state": {
         const i = await indstillinger();
         const liste = await sikrListe();
-        const { lastError, skipStopped, selectorTrouble } = await get(["lastError", "skipStopped", "selectorTrouble"]);
+        const { lastError, skipStopped, selectorTrouble, ytError } =
+          await get(["lastError", "skipStopped", "selectorTrouble", "ytError"]);
+        const ytListe = await sikrYtListe();
         svar({
           ...i, c2pa: !!i.c2pa, ids: liste.ids,
           listMeta: { generated_at: liste.generated_at, count: liste.ids.length,
                       origin: liste.origin, source: liste.source },
           lastError: lastError || null,
+          ytError: ytError || null,
+          ytMeta: { generated_at: ytListe.generated_at, source: ytListe.source,
+                    count: ytListe.block.length + ytListe.warn.length },
           skipStopped: skipStopped || null,
           selectorTrouble: selectorTrouble || null,
         });
@@ -307,8 +331,16 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
         break;
       }
       case "selectors": {
+        // Pr. site. Med én faelles noegle slettede en sund YouTube-fane en levende
+        // Spotify-fejlmelding og omvendt - og med begge sider aabne, som er det
+        // normale for denne udvidelse, ville vagten stort set altid sige "alt vel".
+        const site = msg.site === "youtube" ? "youtube" : "spotify";
         const brudte = Array.isArray(msg.broken) ? msg.broken : [];
-        await set({ selectorTrouble: brudte.length ? { at: Date.now(), broken: brudte } : null });
+        const { selectorTrouble } = await get("selectorTrouble");
+        const nu = { ...(selectorTrouble || {}) };
+        if (brudte.length) nu[site] = { at: Date.now(), broken: brudte };
+        else delete nu[site];
+        await set({ selectorTrouble: Object.keys(nu).length ? nu : null });
         svar({ ok: true });
         break;
       }

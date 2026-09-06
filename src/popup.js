@@ -6,21 +6,39 @@ let state = null;
 
 const DAG = 86400000;
 
+const DAGE = (iso) => {
+  const t = Date.parse(iso || "");
+  return t ? Math.floor((Date.now() - t) / DAG) : null;
+};
+
 function advarsel() {
   // Raekkefoelge efter alvor. En knaekket selektor er vaerst: saa virker filteret
   // ikke, og uden denne besked ville brugeren aldrig faa det at vide.
-  if (state.selectorTrouble)
-    return "Spotify has changed its page. Filtering may be incomplete (" +
-           state.selectorTrouble.broken.join(", ") + "). Please report this.";
+  // NB: pr. site. Med én faelles noegle slettede en sund YouTube-fane en levende
+  // Spotify-fejlmelding, og vagten sagde stort set altid "alt vel".
+  const st = state.selectorTrouble;
+  if (st && (st.spotify || st.youtube)) {
+    const dele = [];
+    if (st.spotify) dele.push("Spotify (" + st.spotify.broken.join(", ") + ")");
+    if (st.youtube) dele.push("YouTube (" + st.youtube.broken.join(", ") + ")");
+    return "The page layout has changed on " + dele.join(" and ") +
+           ". Filtering may be incomplete. Please report this.";
+  }
   if (state.skipStopped)
     return "Stopped after " + state.skipStopped.after +
            " skips in a row. Use the player once to resume.";
   if (state.lastError)
     return "List update failed (" + state.lastError.msg + "). Still using the last good copy.";
-  const gen = Date.parse(state.listMeta.generated_at || "");
-  if (gen && Date.now() - gen > 14 * DAG)
-    return "The list has not been updated in " +
-           Math.floor((Date.now() - gen) / DAG) + " days. It may have stopped refreshing.";
+  if (state.ytError)
+    return "YouTube list update failed (" + state.ytError.msg + "). Still using the last good copy.";
+  // Begge lister overvaages. GitHub slukker planlagte robotter efter 60 dages
+  // stilhed, og saa er en gammel dato det eneste synlige tegn.
+  for (const [navn, meta] of [["Spotify", state.listMeta], ["YouTube", state.ytMeta || {}]]) {
+    const d = DAGE(meta.generated_at);
+    if (d !== null && d > 14)
+      return "The " + navn + " list has not been updated in " + d +
+             " days. It may have stopped refreshing.";
+  }
   return null;
 }
 
@@ -30,13 +48,15 @@ function tegn() {
   $("skip").checked = state.skip;
   $("hide").checked = state.hide;
   $("s-skipped").textContent = (state.stats && state.stats.skipped) || 0;
-  $("s-count").textContent = state.listMeta.count.toLocaleString("en-US");
+  const ialt = state.listMeta.count + ((state.ytMeta && state.ytMeta.count) || 0);
+  $("s-count").textContent = ialt.toLocaleString("en-US");
 
   // Datoen paa DATAEN, ikke paa hentningen. Viser vi "i dag" fordi hentningen
   // lykkedes mod en frossen fil, lyver vi om hvor frisk listen er.
   const d = state.listMeta.generated_at;
   $("m-date").textContent = d ? new Date(d).toISOString().slice(0, 10) : "unknown";
-  $("m-source").textContent = state.listMeta.source || "bundled";
+  $("m-source").textContent = (state.ytMeta && state.ytMeta.count)
+    ? "CennoxX + AiSList" : (state.listMeta.source || "bundled");
 
   const w = $("warn");
   const tekst = advarsel();

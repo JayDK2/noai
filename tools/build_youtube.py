@@ -37,6 +37,13 @@ def hent(navn):
 
 def main():
     block, warn = hent("aislist_blocklist.txt"), hent("aislist_warnlist.txt")
+    # Kilden har kanaler paa BEGGE lister (3 ved sidste maaling). Det mildeste
+    # niveau skal vinde: staar en kanal paa warn, maa den ikke ogsaa graatones.
+    overlap = set(block) & set(warn)
+    if overlap:
+        print("%d kanal(er) paa begge lister - beholdes kun som warn: %s"
+              % (len(overlap), ", ".join(sorted(overlap)[:5])), file=sys.stderr)
+        block = [h for h in block if h not in overlap]
     if len(block) < 1000:
         print("kun %d kanaler - afbryder" % len(block), file=sys.stderr)
         return 1

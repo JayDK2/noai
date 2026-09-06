@@ -64,10 +64,17 @@
     return normaliser((location.pathname.split("/")[1] || ""));
   }
 
-  function haandtag(node) {
-    const a = node.querySelector('a[href^="/@"]');
-    if (a) return normaliser((a.getAttribute("href") || "").split(/[/?#]/)[1] || "");
-    return sideHaandtag();
+  // Kanalsider viser OGSAA hylder med andre kanalers indhold (udvalgte kanaler,
+  // playlister med fremmede videoer). Reserven maa kun gaelde kanalens eget gitter,
+  // ellers graatoner vi uskyldige videoer med teksten "reported as AI".
+  const EGET_GITTER = "ytd-rich-grid-renderer, ytd-item-section-renderer, #contents.ytd-rich-grid-renderer";
+
+  function haandtag(node, a) {
+    const link = a !== undefined ? a : node.querySelector('a[href^="/@"]');
+    if (link) return normaliser((link.getAttribute("href") || "").split(/[/?#]/)[1] || "");
+    const side = sideHaandtag();
+    if (!side) return null;
+    return node.closest(EGET_GITTER) ? side : null;
   }
 
   function rens() {
@@ -77,11 +84,15 @@
     let medLink = 0;
     const paaSiden = sideHaandtag();
     for (const k of kort) {
-      const h = haandtag(k);
+      const link = k.querySelector('a[href^="/@"]');   // hentes én gang, bruges to
+      const h = haandtag(k, link);
       if (!h) continue;                       // reklame eller kort uden kanal
-      if (k.querySelector('a[href^="/@"]')) medLink++;   // kun rigtige links taeller
+      if (link) medLink++;                    // kun rigtige links taeller
       const tilladt = state.allow.has(h);
-      const niveau = tilladt ? "" : state.block.has(h) ? "block" : state.warn.has(h) ? "warn" : "";
+      // WARN vinder ved konflikt. Kilden har 3 kanaler paa begge lister, og lod vi
+      // block vinde, ville vi graatone kanaler som kilden kun vurderer "muligt" -
+      // praecis den sammenmasning af tvivl som to-niveau-modellen findes for.
+      const niveau = tilladt ? "" : state.warn.has(h) ? "warn" : state.block.has(h) ? "block" : "";
       const skjul = niveau === "block" && state.hide;
       const oensket = niveau ? (skjul ? "hidden" : niveau) : "";
       const mrk = k.querySelector(".noai-yt-mark");
@@ -91,21 +102,37 @@
       k.classList.toggle("noai-yt-warn", niveau === "warn");
       k.classList.toggle("noai-yt-hidden", skjul);
       if (niveau && !mrk) {
-        const m = document.createElement("span");
+        const m = document.createElement("button");
         m.className = "noai-yt-mark";
+        m.type = "button";
         // Ordlyden skiller de to niveauer ad. "Reported" er en paastand fra andre,
         // ikke en konstatering fra os - og warn-niveauet siger tydeligt at det er
         // mindre sikkert end block.
         m.textContent = niveau === "block" ? "reported as AI" : "possibly AI";
+        // Maerket ER udvejen. Uden den kunne en bruger ikke tillade en kanal paa
+        // YouTube overhovedet - popup ens "Add current" laeser kun Spotify - og med
+        // 21.000 kanaler fra en faellesliste ER der falske positive. Eneste alternativ
+        // ville vaere at slukke hele funktionen.
+        m.title = "Reported by a community list. Click to never filter " + h + " again.";
+        m.addEventListener("click", async (e) => {
+          e.preventDefault(); e.stopPropagation();
+          const s2 = await send({ type: "ytState" });
+          if (!s2) return;
+          const liste = new Set(s2.allowlist || []);
+          liste.add(h);
+          await send({ type: "setOption", key: "allowlist", value: [...liste] });
+        });
         k.appendChild(m);
       } else if (!niveau && mrk) { mrk.remove(); }
     }
     // Selvtest: findes der kort, men ingen af dem har et kanallink, er selektoren
     // knaekket - og saa filtrerer vi lydloest ingenting.
-    const brudt = kort.length > 4 && medLink === 0 && !paaSiden;
+    // Paa en kanalside har kortene med rette ingen links, MEN kun i kanalens eget
+    // gitter. Er der mange kort helt uden links noget sted, er selektoren knaekket.
+    const brudt = kort.length > 8 && medLink === 0;
     if (brudt !== svigtMeldt) {
       svigtMeldt = brudt;
-      send({ type: "selectors", broken: brudt ? ["youtube-channel-link"] : [] });
+      send({ type: "selectors", site: "youtube", broken: brudt ? ["youtube-channel-link"] : [] });
     }
   }
 

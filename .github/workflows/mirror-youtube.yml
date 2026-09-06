@@ -65,6 +65,12 @@ jobs:
 
           block = hent("aislist_blocklist.txt")
           warn  = hent("aislist_warnlist.txt")
+          # Kilden har kanaler paa BEGGE lister. Det mildeste niveau vinder, ellers
+          # graatoner vi kanaler som kilden kun vurderer "muligt".
+          overlap = set(block) & set(warn)
+          if overlap:
+              print("%d paa begge lister - beholdes kun som warn" % len(overlap))
+              block = [h for h in block if h not in overlap]
           if len(block) < 1000:
               sys.exit("kun %d i blocklisten - afbryder" % len(block))
 
