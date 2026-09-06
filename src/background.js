@@ -11,120 +11,151 @@
 const MIRROR_URL = "https://raw.githubusercontent.com/JayDK2/noai/main/blocklist.json";
 const ALARM = "noai-refresh";
 const REFRESH_MIN = 360;             // 6 timer
+const HENT_TIMEOUT = 30000;
 const MAX_BYTES = 4 * 1024 * 1024;   // loft: en kapret kilde maa ikke kunne sprage hukommelsen
 const MIN_IDS = 1000;                // krympe-vaern, nedre gulv
 const SHRINK_FLOOR = 0.8;            // krympe-vaern, relativt til nuvaerende
+const MAX_UGYLDIGE = 0.02;           // andel daarlige id er vi accepterer og smider vaek
 const ID_RE = /^[A-Za-z0-9]{22}$/;
 
-const STANDARD = {
+// Funktion, ikke konstant: en delt default ville blive muteret af stats-taelleren
+// og forurene alle senere laesninger i workerens levetid.
+const standard = () => ({
   enabled: true,
   skip: false,          // auto-skip er OPT-IN. Standarden graatoner kun.
   hide: false,          // graaton (false) vs skjul (true)
-  allowlist: [],        // kunstner-id'er brugeren aldrig vil filtrere
-  allowNames: {},       // id -> navn, kun saa listen er laeselig i popup'en
-  stats: { skipped: 0, msSaved: 0 },
-};
+  allowlist: [],        // kunstner-id er brugeren aldrig vil filtrere
+  allowNames: {},       // id -> navn, kun saa listen er laeselig i popup en
+  stats: { skipped: 0 },
+});
 
 const get = (k) => chrome.storage.local.get(k);
 const set = (o) => chrome.storage.local.set(o);
 
 async function indstillinger() {
-  const s = await get(Object.keys(STANDARD));
-  return { ...STANDARD, ...s };
+  const d = standard();
+  const s = await get(Object.keys(d));
+  return { ...d, ...s, stats: { ...d.stats, ...(s.stats || {}) } };
 }
 
 // --- listen ---------------------------------------------------------------
 
-async function laesFroe() {
-  const r = await fetch(chrome.runtime.getURL("blocklist.json"));
-  return await r.json();
-}
-
 async function sikrListe() {
   const { blocklist } = await get("blocklist");
   if (blocklist && Array.isArray(blocklist.ids) && blocklist.ids.length) return blocklist;
-  const froe = await laesFroe();
+  const r = await fetch(chrome.runtime.getURL("blocklist.json"));
+  const froe = await r.json();
   froe.origin = "bundled";
   await set({ blocklist: froe });
   return froe;
 }
 
 function validér(tekst, nuvaerendeAntal) {
-  if (tekst.length > MAX_BYTES) throw new Error("svar for stort: " + tekst.length + " bytes");
   let data;
   try { data = JSON.parse(tekst); }
   catch (e) { throw new Error("ikke gyldig JSON (fejlside serveret som 200?)"); }
   if (!data || !Array.isArray(data.ids)) throw new Error("mangler ids-array");
   const ids = data.ids.filter((i) => typeof i === "string" && ID_RE.test(i));
-  if (ids.length !== data.ids.length) throw new Error("indeholdt ugyldige id'er");
-  if (ids.length < MIN_IDS) throw new Error("kun " + ids.length + " id'er");
+  const kasseret = data.ids.length - ids.length;
+  // Et enkelt daarligt id maa ikke fryse listen for evigt - men en kilde der pludselig
+  // er halvt vroevl skal stoppes. Derfor en ANDEL, ikke nul-tolerance.
+  if (data.ids.length && kasseret / data.ids.length > MAX_UGYLDIGE)
+    throw new Error(kasseret + " af " + data.ids.length + " id er var ugyldige");
+  if (ids.length < MIN_IDS) throw new Error("kun " + ids.length + " id er");
   if (nuvaerendeAntal && ids.length < nuvaerendeAntal * SHRINK_FLOOR)
     throw new Error("listen krympede fra " + nuvaerendeAntal + " til " + ids.length);
-  return { ...data, ids };
+  return { ...data, ids, dropped: kasseret };
 }
 
+let henterNu = null;
+
 async function opdatér() {
-  const nuvaerende = await sikrListe();
-  try {
-    const r = await fetch(MIRROR_URL, { cache: "no-cache" });
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const frisk = validér(await r.text(), nuvaerende.ids.length);
-    frisk.origin = "mirror";
-    frisk.fetched_at = new Date().toISOString();
-    // ERSTATTER. Flettes ALDRIG ind i den gamle: goer man det, bliver den
-    // indbagte liste et gulv, og en kunstner der er fjernet hos kilden
-    // forbliver flaget for evigt. Det braekker retten til berigtigelse.
-    await set({ blocklist: frisk, lastError: null });
-    return { ok: true, count: frisk.ids.length };
-  } catch (e) {
-    // beholder sidste gode liste - en fejlet hentning er ikke en tom liste
-    await set({ lastError: { when: new Date().toISOString(), msg: String(e.message || e) } });
-    return { ok: false, error: String(e.message || e) };
-  }
+  if (henterNu) return henterNu;          // onStartup kan kappes med alarmen
+  henterNu = (async () => {
+    const nuvaerende = await sikrListe();
+    const afbryd = new AbortController();
+    const ur = setTimeout(() => afbryd.abort(), HENT_TIMEOUT);
+    try {
+      const r = await fetch(MIRROR_URL, { cache: "no-cache", signal: afbryd.signal });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const len = Number(r.headers.get("content-length") || 0);
+      if (len > MAX_BYTES) throw new Error("svar for stort: " + len + " bytes");
+      const tekst = await r.text();
+      if (tekst.length > MAX_BYTES) throw new Error("svar for stort");
+      const frisk = validér(tekst, nuvaerende.ids.length);
+      frisk.origin = "mirror";
+      frisk.fetched_at = new Date().toISOString();
+      // ERSTATTER. Flettes ALDRIG ind i den gamle: goer man det, bliver den indbagte
+      // liste et gulv, og en kunstner der er fjernet hos kilden forbliver flaget for
+      // evigt. Det braekker retten til berigtigelse.
+      await set({ blocklist: frisk, lastError: null });
+      return { ok: true, count: frisk.ids.length };
+    } catch (e) {
+      // beholder sidste gode liste - en fejlet hentning er ikke en tom liste
+      await set({ lastError: { when: new Date().toISOString(), msg: String(e.message || e) } });
+      return { ok: false, error: String(e.message || e) };
+    } finally {
+      clearTimeout(ur);
+      henterNu = null;
+    }
+  })();
+  return henterNu;
 }
 
 // --- maa denne fane skippe? -----------------------------------------------
 
-const LAAS_MS = 2500;   // to Spotify-faner der begge spiller maa ikke skippe hver for sig
+const LAAS_MS = 2500;
+// Laasen bor i en variabel, ikke i storage: et await mellem laesning og skrivning
+// giver to faner mulighed for begge at bestaa kontrollen og begge skippe. Workeren
+// er enkelttraadet, saa tjek-og-saet uden await er udeleligt.
+let laas = null;
 
-async function maaSkippe(sender) {
+function maaSkippe(sender) {
   const tab = sender && sender.tab;
   if (!tab) return { ok: false, reason: "no-tab" };
-
-  // audible er udefineret hvis vi mangler rettigheder til at se den. Vi gaetter
-  // IKKE - saa ville vi kunne skippe musik der spiller paa en anden enhed.
+  // audible er udefineret hvis vi mangler rettigheder til at se den. Vi gaetter IKKE -
+  // saa kunne vi skippe musik der spiller paa en anden enhed.
   if (typeof tab.audible !== "boolean") return { ok: false, reason: "audible-unknown" };
   if (!tab.audible) return { ok: false, reason: "not-audible" };
   if (tab.mutedInfo && tab.mutedInfo.muted) return { ok: false, reason: "tab-muted" };
 
-  const { skipLock } = await get("skipLock");
   const nu = Date.now();
-  if (skipLock && skipLock.tabId !== tab.id && nu - skipLock.at < LAAS_MS)
+  if (laas && laas.tabId !== tab.id && nu - laas.at < LAAS_MS)
     return { ok: false, reason: "another-tab-leads" };
-  await set({ skipLock: { tabId: tab.id, at: nu } });
+  laas = { tabId: tab.id, at: nu };
   return { ok: true };
 }
 
 // --- beskeder -------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((msg, sender, svar) => {
+  if (msg && msg.type === "maySkip") { svar(maaSkippe(sender)); return false; }
   (async () => {
     switch (msg && msg.type) {
       case "state": {
-        const [i, liste] = [await indstillinger(), await sikrListe()];
-        const { lastError, skipStopped } = await get(["lastError", "skipStopped"]);
-        svar({ ...i, ids: liste.ids, listMeta: {
-          generated_at: liste.generated_at, count: liste.ids.length,
-          origin: liste.origin, source: liste.source,
-        }, lastError: lastError || null, skipStopped: skipStopped || null });
+        const i = await indstillinger();
+        const liste = await sikrListe();
+        const { lastError, skipStopped, selectorTrouble } = await get(["lastError", "skipStopped", "selectorTrouble"]);
+        svar({
+          ...i, ids: liste.ids,
+          listMeta: { generated_at: liste.generated_at, count: liste.ids.length,
+                      origin: liste.origin, source: liste.source },
+          lastError: lastError || null,
+          skipStopped: skipStopped || null,
+          selectorTrouble: selectorTrouble || null,
+        });
         break;
       }
-      case "maySkip": svar(await maaSkippe(sender)); break;
       case "skipped": {
         const i = await indstillinger();
         i.stats.skipped += 1;
-        i.stats.msSaved += Math.max(0, msg.ms | 0);
         await set({ stats: i.stats });
+        svar({ ok: true });
+        break;
+      }
+      case "selectors": {
+        const brudte = Array.isArray(msg.broken) ? msg.broken : [];
+        await set({ selectorTrouble: brudte.length ? { at: Date.now(), broken: brudte } : null });
         svar({ ok: true });
         break;
       }
@@ -145,23 +176,23 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
 // setInterval overlever ikke en MV3 service worker (den rives ned efter ~30 s
 // tomgang). chrome.alarms er den eneste der faktisk fyrer.
 
-async function planlaeg() {
-  await chrome.alarms.create(ALARM, { periodInMinutes: REFRESH_MIN, delayInMinutes: 1 });
-}
+const planlaeg = () => chrome.alarms.create(ALARM, { periodInMinutes: REFRESH_MIN, delayInMinutes: 1 });
 
 chrome.runtime.onInstalled.addListener(async () => {
-  await planlaeg();                       // alarmen foerst - den maa aldrig kunne tabes
+  planlaeg();                       // alarmen foerst - den maa aldrig kunne tabes
   try { await sikrListe(); } catch (e) {
     await set({ lastError: { when: new Date().toISOString(), msg: "seed: " + e.message } });
   }
 });
+
 chrome.runtime.onStartup.addListener(async () => {
+  planlaeg();
   await sikrListe();
-  await planlaeg();
   // alarmer fyrer ikke mens browseren er lukket - tjek selv om listen er gammel
   const { blocklist } = await get("blocklist");
   const alder = blocklist && blocklist.fetched_at
     ? Date.now() - Date.parse(blocklist.fetched_at) : Infinity;
   if (alder > REFRESH_MIN * 60 * 1000) opdatér();
 });
+
 chrome.alarms.onAlarm.addListener((a) => { if (a.name === ALARM) opdatér(); });

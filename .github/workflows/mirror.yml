@@ -1,17 +1,26 @@
 name: mirror blocklist
 
 # Vi henter IKKE direkte fra CennoxX i extensionen. Vi spejler hertil foerst.
-# Grunden er ikke mistillid til ham - det er at et loefte om at fjerne en
-# kunstner der klager kraever at vi ejer den fil brugerne henter. Uden dette
-# skridt er "report a mistake" en formular uden noget bag.
+# Grunden er ikke mistillid til ham - det er at et loefte om at fjerne en kunstner
+# der klager kraever at vi ejer den fil brugerne henter. Uden dette skridt er
+# "report a mistake" en formular uden noget bag.
 
 on:
   schedule:
     - cron: "17 */6 * * *"
   workflow_dispatch:
 
+# GitHub slukker planlagte robotter efter 60 dages inaktivitet i repoet, og robottens
+# EGNE commits nulstiller ikke uret. Sker det, holder listen op med at blive frisk, og
+# det eneste synlige tegn er datoen i popup en - som derfor advarer efter 14 dage.
+# Genstart med: gh workflow enable "mirror blocklist"
+
 permissions:
   contents: write
+
+concurrency:
+  group: mirror
+  cancel-in-progress: false
 
 jobs:
   mirror:
@@ -19,9 +28,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Hent, kontrollér og træk tilbagetrækninger fra
+      - name: Hent, traek tilbagetrukne fra, og kontrollér
         run: |
-          python3 - <<'PY'
+          python3 - <<"PY"
           import csv, io, json, os, re, sys, urllib.request
           from datetime import datetime, timezone
 
@@ -35,17 +44,15 @@ jobs:
           if text.lstrip()[:1] == "<":
               sys.exit("fik HTML, ikke CSV - fejlside serveret som 200?")
 
-          ids = sorted({r[-1].strip() for r in csv.reader(io.StringIO(text))
-                        if r and ID.match(r[-1].strip())})
+          # Laes efter KOLONNENAVN, ikke position. Tilfoejer kilden en kolonne, ville
+          # "sidste kolonne" i bedste fald give nul id er - og i vaerste fald de forkerte.
+          rdr = csv.DictReader(io.StringIO(text))
+          if not rdr.fieldnames or "id" not in rdr.fieldnames:
+              sys.exit("CSV mangler id-kolonnen. Kolonner: %s" % (rdr.fieldnames,))
+          ids = sorted({(r.get("id") or "").strip() for r in rdr})
+          ids = [i for i in ids if ID.match(i)]
           if len(ids) < 1000:
-              sys.exit("kun %d id'er - afbryder" % len(ids))
-
-          # +/- 10 %-baand mod trunkering og mod masse-indsprojtning
-          if os.path.exists("blocklist.json"):
-              gammel = json.load(open("blocklist.json"))["ids"]
-              if gammel and not (0.9 <= len(ids) / len(gammel) <= 1.1):
-                  sys.exit("bevaegelse uden for +/-10 %%: %d -> %d. Kraever et menneske."
-                           % (len(gammel), len(ids)))
+              sys.exit("kun %d id er - afbryder" % len(ids))
 
           fjernet = set()
           if os.path.exists("mirror/retracted.csv"):
@@ -55,6 +62,16 @@ jobs:
                       fjernet.add(line)
           ids = [i for i in ids if i not in fjernet]
 
+          # +/- 10 %-baand SKAL maales efter at tilbagetrukne er trukket fra. Ellers
+          # sammenligner vi raa upstream med en tidligere renset liste, forholdet vokser
+          # med antallet af fjernede kunstnere, og omkring 700 fjernede ville faa robotten
+          # til at fejle permanent - altsaa netop naar loeftet om fjernelse bliver brugt.
+          if os.path.exists("blocklist.json"):
+              gammel = json.load(open("blocklist.json"))["ids"]
+              if gammel and not (0.9 <= len(ids) / len(gammel) <= 1.1):
+                  sys.exit("bevaegelse uden for +/-10 %%: %d -> %d. Kraever et menneske."
+                           % (len(gammel), len(ids)))
+
           json.dump({
               "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
               "source": "CennoxX/spotify-ai-blocker",
@@ -62,7 +79,8 @@ jobs:
               "count": len(ids),
               "ids": ids,
           }, open("blocklist.json", "w"), separators=(",", ":"))
-          print("%d id'er (%d trukket tilbage)" % (len(ids), len(fjernet)))
+          open("/tmp/noai-count", "w").write(str(len(ids)))
+          print("%d id er (%d trukket tilbage)" % (len(ids), len(fjernet)))
           PY
 
       - name: Commit hvis der er noget nyt
@@ -70,5 +88,7 @@ jobs:
           git config user.name "noai-mirror"
           git config user.email "noai-mirror@users.noreply.github.com"
           git add blocklist.json
-          git diff --staged --quiet || git commit -m "blocklist: $(python3 -c "import json;print(json.load(open('blocklist.json'))['count'])") artists"
+          git diff --staged --quiet && exit 0
+          git commit -m "blocklist: $(cat /tmp/noai-count) artists"
+          git pull --rebase --autostash origin main
           git push

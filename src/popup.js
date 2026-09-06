@@ -4,6 +4,26 @@ const $ = (id) => document.getElementById(id);
 
 let state = null;
 
+const DAG = 86400000;
+
+function advarsel() {
+  // Raekkefoelge efter alvor. En knaekket selektor er vaerst: saa virker filteret
+  // ikke, og uden denne besked ville brugeren aldrig faa det at vide.
+  if (state.selectorTrouble)
+    return "Spotify has changed its page. Filtering may be incomplete (" +
+           state.selectorTrouble.broken.join(", ") + "). Please report this.";
+  if (state.skipStopped)
+    return "Stopped after " + state.skipStopped.after +
+           " skips in a row. Use the player once to resume.";
+  if (state.lastError)
+    return "List update failed (" + state.lastError.msg + "). Still using the last good copy.";
+  const gen = Date.parse(state.listMeta.generated_at || "");
+  if (gen && Date.now() - gen > 14 * DAG)
+    return "The list has not been updated in " +
+           Math.floor((Date.now() - gen) / DAG) + " days. It may have stopped refreshing.";
+  return null;
+}
+
 function tegn() {
   $("enabled").checked = state.enabled;
   $("skip").checked = state.skip;
@@ -18,15 +38,9 @@ function tegn() {
   $("m-source").textContent = state.listMeta.source || "bundled";
 
   const w = $("warn");
-  if (state.skipStopped) {
-    w.hidden = false;
-    w.textContent = "Stopped after " + state.skipStopped.after +
-      " skips in a row. Use the player once to resume.";
-  } else if (state.lastError) {
-    w.hidden = false;
-    w.textContent = "List update failed (" + state.lastError.msg +
-      "). Still using the last good copy.";
-  } else { w.hidden = true; }
+  const tekst = advarsel();
+  w.hidden = !tekst;
+  w.textContent = tekst || "";
 
   const ul = $("allow");
   ul.textContent = "";

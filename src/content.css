@@ -1,14 +1,20 @@
-/* Graatoning: skal kunne ses uden at vaere farve alene, derfor ogsaa tekst-maerket. */
+/* Graatoning. Selve raekken daempes, men MAERKET holdes i fuld styrke -
+   det er den eneste ikke-farvebaserede besked til brugeren, og et maerke paa
+   38 % kan ikke laeses. */
 [data-testid="tracklist-row"].noai-flagged {
-  opacity: .38;
   position: relative;
+}
+[data-testid="tracklist-row"].noai-flagged > *:not(.noai-mark) {
+  opacity: .38;
 }
 [data-testid="tracklist-row"].noai-hidden { display: none !important; }
 
 .noai-mark {
   position: absolute;
-  right: 12px;
-  bottom: 2px;
+  left: 50%;
+  bottom: 1px;
+  transform: translateX(-50%);
+  opacity: 1;
   font-size: 10px;
   line-height: 1.4;
   letter-spacing: .02em;
