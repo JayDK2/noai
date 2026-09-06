@@ -9,33 +9,78 @@
 }
 [data-testid="tracklist-row"].noai-hidden { display: none !important; }
 
+/* Maerket: en lille amber LCD-plade fra samme rack som popup'en. Bliver
+   siddende centreret i bunden af raekken, saa den hverken daekker
+   varigheden til hoejre eller menu-knappen. Teksten baerer beskeden selv -
+   farven er kun pynt. */
 .noai-mark {
   position: absolute;
   left: 50%;
   bottom: 1px;
   transform: translateX(-50%);
   opacity: 1;
-  font-size: 10px;
-  line-height: 1.4;
-  letter-spacing: .02em;
-  color: #d9b25f;
+  display: inline-block;
+  padding: 1px 6px 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 9px;
+  line-height: 1.5;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: #ffb454;
+  text-shadow: 0 0 4px rgba(255, 180, 84, .5);
+  background: #0a0806;
+  border: 1px solid #000;
+  border-radius: 2px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, .9), 0 1px 0 rgba(255, 255, 255, .07);
   pointer-events: none;
   white-space: nowrap;
 }
+.noai-mark::before {
+  content: '';
+  display: inline-block;
+  vertical-align: 1px;
+  width: 4px;
+  height: 4px;
+  margin-right: 6px;
+  background: #ffb454;
+  box-shadow: 0 0 3px rgba(255, 180, 84, .6);
+}
 
+/* Toasten: samme roede fejl-lampe-strimmel som advarslen i popup'en - en
+   sort rille i faceplaten med en lysende diode i venstre side. */
 #noai-toast {
   position: fixed;
   left: 50%;
   bottom: 108px;
   transform: translateX(-50%);
   z-index: 2147483000;
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
   max-width: 420px;
-  padding: 10px 16px;
-  border: 1px solid #3a3a3a;
-  border-radius: 4px;
-  background: #101010;
-  color: #e8e8e8;
-  font: 13px/1.4 -apple-system, system-ui, sans-serif;
+  padding: 9px 14px 9px 12px;
+  border: 1px solid #000;
+  border-radius: 3px;
+  background:
+    linear-gradient(180deg, #23262d 0%, #171a20 45%, #101216 100%);
+  color: #cfd5de;
+  font: 600 11px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  letter-spacing: .04em;
+  text-shadow: 0 1px 0 #000;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .07),
+    0 4px 14px rgba(0, 0, 0, .7),
+    0 1px 2px rgba(0, 0, 0, .9);
   visibility: hidden;
+}
+#noai-toast::before {
+  content: '';
+  flex: none;
+  width: 6px;
+  height: 6px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: #ff4d4d;
+  box-shadow: 0 0 5px #ff4d4d, 0 0 10px rgba(255, 77, 77, .45);
 }
 #noai-toast.noai-vis { visibility: visible; }

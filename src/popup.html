@@ -1,94 +1,510 @@
 <!doctype html>
+<html dir="ltr">
+<head>
 <meta charset="utf-8">
 <title>NoAI</title>
 <style>
-  :root { color-scheme: dark; }
-  * { box-sizing: border-box; }
+  /* ── NoAI · rack-unit faceplate (sibling of LevelPilot Pro) ───────────
+     Same rack, one unit down: the same brushed panel, the same corner
+     screws, the same engraved grey lettering and amber LCD glass — but
+     this unit is a GATE, not a limiter. No meter, no fader: a bank of
+     illuminated switches, one wide two-line LCD, a red fault lamp and a
+     bypass strip. Zero motion by design. ─────────────────────────────── */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    color-scheme: dark;
+    --panel-hi:   #23262d;
+    --panel-lo:   #101216;
+    --etch:       #8b93a1;   /* engraved label grey        */
+    --etch-dim:   #565d6a;
+    --etch-hi:    #cfd5de;
+    --lcd-amber:  #ffb454;
+    --lcd-amber-dim: rgba(255,180,84,0.48);
+    --lcd-bg:     #0a0806;
+    --led-green:  #3ddc84;
+    --led-amber:  #ffb454;
+    --led-red:    #ff4d4d;
+    --groove:     #060708;
+    --edge-hi:    rgba(255,255,255,0.07);
+    --mono:       ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  [hidden] { display: none !important; }
+
   body {
-    width: 336px; margin: 0; padding: 0;
-    background: #0c0c0d; color: #e6e5e3;
-    font: 13px/1.45 -apple-system, system-ui, "Segoe UI", sans-serif;
+    width: 320px;
+    padding: 14px 16px 12px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    color: var(--etch);
+    background:
+      radial-gradient(140% 90% at 50% -10%, rgba(255,255,255,0.05), transparent 60%),
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.014) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg, var(--panel-hi) 0%, #171a20 45%, var(--panel-lo) 100%);
+    position: relative;
   }
-  header { padding: 14px 16px 12px; border-bottom: 1px solid #1e1e20; }
-  h1 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
-  h1 span { color: #d9b25f; }
-  .sub { margin: 3px 0 0; font-size: 11px; color: #77767a; }
 
-  section { padding: 12px 16px; border-bottom: 1px solid #1e1e20; }
-  .row { display: flex; align-items: flex-start; gap: 10px; padding: 5px 0; }
-  .row + .row { margin-top: 2px; }
-  .row label { flex: 1; cursor: pointer; }
-  .row .hint { display: block; font-size: 11px; color: #77767a; margin-top: 1px; }
-  input[type=checkbox] { margin: 2px 0 0; accent-color: #d9b25f; }
+  /* machined corner screws — same part bin as LevelPilot */
+  body::before, body::after {
+    content: '';
+    position: absolute;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background:
+      linear-gradient(135deg, transparent 44%, #040506 44% 56%, transparent 56%),
+      radial-gradient(circle at 35% 30%, #5a6170, #23272e 65%, #0b0d10);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.08), inset 0 0 2px #000;
+  }
+  body::before { top: 7px;    left: 7px; }
+  body::after  { bottom: 7px; left: 7px; box-shadow: 0 -1px 0 rgba(0,0,0,0.6), inset 0 0 2px #000; }
+  .screw-tr, .screw-br {
+    position: absolute; right: 7px;
+    width: 7px; height: 7px; border-radius: 50%;
+    background:
+      linear-gradient(45deg, transparent 44%, #040506 44% 56%, transparent 56%),
+      radial-gradient(circle at 35% 30%, #5a6170, #23272e 65%, #0b0d10);
+    box-shadow: 0 1px 0 rgba(255,255,255,0.08), inset 0 0 2px #000;
+  }
+  .screw-tr { top: 7px; }
+  .screw-br { bottom: 7px; }
 
-  .stats { display: flex; gap: 20px; }
-  .stat b { display: block; font-size: 19px; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .stat span { font-size: 10.5px; color: #77767a; text-transform: uppercase; letter-spacing: .06em; }
+  /* ── header: brand + master power (the FILTER switch) ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 2px 9px;
+    border-bottom: 1px solid var(--groove);
+    box-shadow: 0 1px 0 var(--edge-hi);
+    margin-bottom: 10px;
+  }
+  .brand { display: flex; flex-direction: column; gap: 3px; }
+  .brand-line { display: flex; align-items: baseline; gap: 9px; }
+  h1 {
+    display: flex;
+    align-items: baseline;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--etch-hi);
+    text-shadow: 0 1px 0 #000;
+  }
+  /* the unit's one emblem: "AI" recedes to engraved grey and a red bar is
+     struck through the x-height of both glyphs. The dark halo around the
+     bar separates it from the letterforms so it reads as a strike, not a
+     rendering glitch. */
+  h1 s {
+    text-decoration: none;
+    position: relative;
+    display: inline-block;
+    color: #6a7280;
+    margin-right: -0.14em; /* swallow the trailing tracking so the bar's overhang is symmetric */
+  }
+  h1 s::after {
+    content: '';
+    position: absolute;
+    left: -2px; right: -2px;
+    top: 50%;
+    height: 3px;
+    margin-top: -1.5px;
+    background: var(--led-red);
+    box-shadow: 0 0 0 1.5px #1a1d23, 0 0 5px rgba(255,77,77,0.55);
+  }
+  .brand-tag {
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--etch-dim);
+    border: 1px solid rgba(139,147,161,0.35);
+    border-radius: 2px;
+    padding: 1px 4px 0;
+    line-height: 1.5;
+  }
+  .tagline {
+    font-size: 8.5px;
+    letter-spacing: 0.04em;
+    color: var(--etch-dim);
+  }
 
-  dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 11.5px; }
-  dt { color: #77767a; }
-  dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .power { display: flex; align-items: center; gap: 8px; }
+  .label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--etch-dim);
+  }
 
-  .warn { margin-top: 8px; padding: 8px 10px; border-left: 2px solid #c2603f; background: #17100e; font-size: 11.5px; color: #e0b8a8; }
-  footer { padding: 11px 16px 13px; font-size: 11px; color: #66656a; }
-  a { color: #9a9899; }
-  a:hover { color: #d9b25f; }
+  /* ── illuminated slide switch (shared part) ── */
+  .switch { position: relative; width: 40px; height: 20px; flex: none; cursor: pointer; }
+  .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .slider {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, #0a0c0f, #14171c);
+    border: 1px solid #000;
+    border-radius: 3px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.8), 0 1px 0 var(--edge-hi);
+  }
+  .slider::before {
+    content: '';
+    position: absolute;
+    width: 16px; height: 14px; left: 2px; top: 2px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, #3d434d, #22262d 50%, #191c22);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.7), inset 0 1px 0 rgba(255,255,255,0.12);
+  }
+  /* LED in the cap — dark red when off */
+  .slider::after {
+    content: '';
+    position: absolute;
+    width: 4px; height: 4px; left: 8px; top: 7px;
+    border-radius: 50%;
+    background: #2a1214;
+    box-shadow: inset 0 0 1px #000;
+  }
+  input:checked + .slider::before { transform: translateX(18px); }
+  input:checked + .slider::after {
+    transform: translateX(18px);
+    background: var(--led-green);
+    box-shadow: 0 0 5px var(--led-green), 0 0 10px rgba(61,220,132,0.5);
+  }
+  /* three colours, three meanings: green = running (FILTER), amber = an
+     engaged option (the gate switches), red = a fault (#warn only) */
+  #skip:checked + .slider::after,
+  #hide:checked + .slider::after {
+    background: var(--led-amber);
+    box-shadow: 0 0 5px var(--led-amber), 0 0 10px rgba(255,180,84,0.5);
+  }
+  input:focus-visible + .slider { outline: 1px solid var(--lcd-amber); outline-offset: 1px; }
+
+  /* ── engraved section captions ── */
+  .caption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 0 0 6px;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--etch-dim);
+  }
+  .caption::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    order: 1;
+    background: var(--groove);
+    box-shadow: 0 1px 0 var(--edge-hi);
+  }
+  .caption > span { order: 0; }
+  .caption > button { order: 2; }
+
+  /* ── GATE: switch bank ── */
+  .gate { margin-bottom: 10px; }
+  .sw-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 2px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--groove);
+    box-shadow: 0 1px 0 var(--edge-hi);
+  }
+  .sw-row:last-child { border-bottom: 0; box-shadow: none; }
+  .sw-text { display: flex; flex-direction: column; gap: 2px; }
+  .sw-name {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--etch);
+    text-shadow: 0 1px 0 #000;
+  }
+  .hint {
+    font-size: 9px;
+    line-height: 1.4;
+    color: var(--etch-dim);
+  }
+
+  /* ── COUNTER: one wide two-line LCD ── */
+  .lcd {
+    padding: 7px 9px 6px;
+    background: var(--lcd-bg);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow: inset 0 2px 5px rgba(0,0,0,0.9), 0 1px 0 var(--edge-hi);
+    font-family: var(--mono);
+    color: var(--lcd-amber);
+    text-shadow: 0 0 4px rgba(255,180,84,0.55);
+  }
+  .lcd-top {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255,180,84,0.14);
+  }
+  .lcd-stat { display: flex; flex-direction: column; gap: 1px; }
+  .lcd-stat b {
+    font-size: 19px;
+    font-weight: 500;
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .lcd-key {
+    font-size: 8px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--lcd-amber-dim);
+    text-shadow: none;
+  }
+  .lcd-bottom {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 10px;
+    padding-top: 5px;
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+  }
+  .lcd-bottom dd {
+    text-align: right;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ── fault lamp strip (only lit when the script has something to say) ── */
+  #warn {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    margin-top: 6px;
+    padding: 5px 7px;
+    font-size: 9px;
+    line-height: 1.4;
+    font-weight: 600;
+    color: var(--led-red);
+    background: var(--groove);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.85), 0 1px 0 var(--edge-hi);
+  }
+  #warn::before {
+    content: '';
+    flex: none;
+    width: 6px; height: 6px;
+    margin-top: 3px;
+    border-radius: 50%;
+    background: var(--led-red);
+    box-shadow: 0 0 5px var(--led-red), 0 0 10px rgba(255,77,77,0.45);
+  }
+
+  .counter { margin-bottom: 10px; }
+
+  /* ── push-buttons (shared part) ── */
   button {
-    font: inherit; font-size: 11.5px; padding: 4px 9px; cursor: pointer;
-    background: #1a1a1c; color: #d8d7d5; border: 1px solid #2c2c2f; border-radius: 3px;
+    font-family: inherit;
+    font-size: 8.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--etch-dim);
+    text-align: center;
+    cursor: pointer;
+    padding: 4px 8px 3px;
+    border: 1px solid #000;
+    border-radius: 3px;
+    background: linear-gradient(180deg, #2b3038, #1b1f25 55%, #14171c);
+    box-shadow: 0 2px 3px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.09);
   }
-  button:hover { border-color: #d9b25f; }
-  ul { list-style: none; margin: 6px 0 0; padding: 0; max-height: 96px; overflow-y: auto; }
-  li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 3px 0; font-size: 11.5px; }
-  li code { color: #8f8e92; font-size: 10.5px; }
-  .muted { color: #66656a; font-size: 11.5px; }
+  button:hover { color: #b8bfca; }
+  button:active {
+    transform: translateY(1px);
+    box-shadow: 0 1px 1px rgba(0,0,0,0.6), inset 0 1px 2px rgba(0,0,0,0.4);
+  }
+  #add { padding: 5px 9px 4px; color: var(--etch); }
+  #add::before {
+    content: '+';
+    margin-right: 4px;
+    color: var(--lcd-amber);
+    text-shadow: 0 0 4px rgba(255,180,84,0.5);
+  }
+
+  /* ── BYPASS: allowlist strip ── */
+  .bypass { margin-bottom: 6px; }
+  .bypass .caption { margin-bottom: 4px; }
+  .bypass-line {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 9px;
+    color: var(--etch-dim);
+  }
+  .bypass-sub { color: var(--etch); }
+  #allow {
+    list-style: none;
+    max-height: 104px;
+    overflow-y: auto;
+    background: var(--groove);
+    border: 1px solid #000;
+    border-radius: 2px;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.85), 0 1px 0 var(--edge-hi);
+  }
+  #allow:empty { display: none; }
+  #allow li {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 6px 4px 7px;
+    border-bottom: 1px solid #000;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.03);
+  }
+  #allow li:last-child { border-bottom: 0; box-shadow: none; }
+  #allow code {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: #b8bfca;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  /* patch-point marker: a lit amber square, not a dot */
+  #allow code::before {
+    content: '';
+    flex: none;
+    width: 4px; height: 4px;
+    background: var(--lcd-amber);
+    box-shadow: 0 0 3px rgba(255,180,84,0.6);
+  }
+  #allow button { font-size: 7.5px; padding: 3px 6px 2px; flex: none; }
+  #allow-empty {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  /* ── faceplate serigraphy + footer ── */
+  .footer {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid var(--groove);
+    box-shadow: 0 -1px 0 var(--edge-hi) inset;
+    font-size: 8.5px;
+    line-height: 1.45;
+    color: #4a505b;
+  }
+  .footer-links {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+    margin-top: 5px;
+  }
+  .footer a {
+    font-size: 8.5px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--etch-dim);
+    text-decoration: none;
+  }
+  .footer a:hover { color: var(--lcd-amber); }
+  .footer-links span { color: #363b44; }
+
+  :focus-visible { outline: 1px solid var(--lcd-amber); outline-offset: 1px; }
 </style>
+</head>
+<body>
+  <span class="screw-tr"></span>
+  <span class="screw-br"></span>
 
-<header>
-  <h1>No<span>AI</span></h1>
-  <p class="sub">Community-reported AI music on Spotify Web</p>
-</header>
-
-<section>
-  <div class="row">
-    <input type="checkbox" id="enabled"><label for="enabled">Filter enabled</label>
+  <div class="header">
+    <div class="brand">
+      <div class="brand-line">
+        <h1>No<s>AI</s></h1>
+        <span class="brand-tag">Community list</span>
+      </div>
+      <span class="tagline">Community-reported AI music · Spotify Web</span>
+    </div>
+    <div class="power">
+      <span class="label">Filter</span>
+      <label class="switch" title="Filter enabled">
+        <input type="checkbox" id="enabled">
+        <span class="slider"></span>
+      </label>
+    </div>
   </div>
-  <div class="row">
-    <input type="checkbox" id="skip"><label for="skip">Auto-skip flagged tracks
-      <span class="hint">Off by default. Plays about a second before skipping.</span></label>
+
+  <div class="gate">
+    <div class="caption"><span>Gate</span></div>
+    <label class="sw-row">
+      <span class="sw-text">
+        <span class="sw-name">Auto-skip flagged tracks</span>
+        <span class="hint">Off by default. Plays about a second before skipping.</span>
+      </span>
+      <span class="switch">
+        <input type="checkbox" id="skip">
+        <span class="slider"></span>
+      </span>
+    </label>
+    <label class="sw-row">
+      <span class="sw-text">
+        <span class="sw-name">Hide instead of dim</span>
+        <span class="hint">Dimming is the default — the list is not always right.</span>
+      </span>
+      <span class="switch">
+        <input type="checkbox" id="hide">
+        <span class="slider"></span>
+      </span>
+    </label>
   </div>
-  <div class="row">
-    <input type="checkbox" id="hide"><label for="hide">Hide instead of dim
-      <span class="hint">Dimming is the default — the list is not always right.</span></label>
+
+  <div class="counter">
+    <div class="caption"><span>Counter</span></div>
+    <div class="lcd">
+      <div class="lcd-top">
+        <div class="lcd-stat"><b id="s-skipped">0</b><span class="lcd-key">Skipped</span></div>
+        <div class="lcd-stat"><b id="s-count">—</b><span class="lcd-key">Artists on list</span></div>
+      </div>
+      <dl class="lcd-bottom">
+        <dt class="lcd-key">List compiled</dt><dd id="m-date">—</dd>
+        <dt class="lcd-key">Source</dt><dd id="m-source">—</dd>
+      </dl>
+    </div>
+    <div id="warn" hidden></div>
   </div>
-</section>
 
-<section class="stats">
-  <div class="stat"><b id="s-skipped">0</b><span>skipped</span></div>
-  <div class="stat"><b id="s-count">—</b><span>on list</span></div>
-</section>
-
-<section>
-  <dl>
-    <dt>List compiled</dt><dd id="m-date">—</dd>
-    <dt>Source</dt><dd id="m-source">—</dd>
-  </dl>
-  <div id="warn" class="warn" hidden></div>
-</section>
-
-<section>
-  <div class="row" style="justify-content:space-between;align-items:center">
-    <span>Never filter these artists</span>
-    <button id="add">Add current</button>
+  <div class="bypass">
+    <div class="caption"><span>Bypass</span><button id="add" title="Allow the artist playing now">Add current</button></div>
+    <div class="bypass-line">
+      <p class="bypass-sub">Never filter these artists.</p>
+      <p id="allow-empty">Nothing allowed yet.</p>
+    </div>
+    <ul id="allow"></ul>
   </div>
-  <ul id="allow"></ul>
-  <p id="allow-empty" class="muted">Nothing allowed yet.</p>
-</section>
 
-<footer>
-  Not affiliated with Spotify. This extension does not detect, block, mute, or skip advertisements.<br>
-  <a href="https://github.com/JayDK2/noai/issues/new" target="_blank" rel="noopener">Report a mistake</a> ·
-  <a href="https://github.com/JayDK2/noai/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy &amp; sources</a>
-</footer>
+  <div class="footer">
+    Not affiliated with Spotify. This extension does not detect, block, mute, or skip advertisements.
+    <div class="footer-links">
+      <a href="https://github.com/JayDK2/noai/issues/new" target="_blank" rel="noopener">Report a mistake</a>
+      <span>·</span>
+      <a href="https://github.com/JayDK2/noai/blob/main/PRIVACY.md" target="_blank" rel="noopener">Privacy &amp; sources</a>
+    </div>
+  </div>
 
-<script src="popup.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
