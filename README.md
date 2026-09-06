@@ -1,8 +1,12 @@
-# NoAI — AI Music Filter
+# NoAI — AI Content Filter
 
-A Chrome extension for the Spotify **web player** that dims tracks which
-community-maintained lists have reported as AI-generated, and can optionally
-skip them.
+A Chrome extension that dims what community-maintained lists have **reported** as
+AI-generated — tracks on the Spotify web player, and videos on YouTube. On
+Spotify it can optionally skip them too.
+
+It never guesses. NoAI has no AI detector and never will: it shows you what
+other people have reported, with the confidence they reported it at, and lets
+you overrule any of it.
 
 It reads only what Spotify has already drawn on screen. No page scripts are
 hooked, no tokens are read, no private API is called, no account changes are
@@ -17,6 +21,20 @@ made, and nothing about you is sent anywhere.
   There is about a second of audio first — see *Known limits*.
 - **Allowlist** — mark any artist as never-filter. It applies to both dimming
   and skipping.
+
+## YouTube
+
+Two tiers, kept apart deliberately:
+
+- **Reported** — dimmed, marked `reported as AI`. Hidden instead, if you prefer.
+- **Possibly** — left fully visible, marked `possibly AI`. Never dimmed.
+
+The upstream list keeps those two apart and so do we; merging them would assert
+a confidence nobody has. Videos with no channel link — ads, sponsored cards —
+are never touched.
+
+A channel's own page is covered too: the cards there do not repeat the channel
+link, so the handle is read from the URL instead.
 
 ## Known limits
 

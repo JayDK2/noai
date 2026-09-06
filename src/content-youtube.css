@@ -1,0 +1,37 @@
+/* NoAI paa YouTube. To niveauer med tydeligt forskellig vaegt:
+   block = graatones kraftigt, warn = fuldt synlig, kun et diskret maerke.
+   Forskellen skal kunne ses, ellers er de to lister ligegyldige. */
+
+yt-lockup-view-model[data-noai], ytd-rich-item-renderer[data-noai],
+ytd-video-renderer[data-noai], ytd-compact-video-renderer[data-noai],
+ytd-grid-video-renderer[data-noai], ytd-playlist-renderer[data-noai] {
+  position: relative;
+}
+
+.noai-yt-block > * { opacity: .32; }
+.noai-yt-hidden   { display: none !important; }
+
+.noai-yt-mark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 3;
+  padding: 2px 6px;
+  border-radius: 0 0 3px 0;
+  background: #0a0806;
+  color: #ffb454;
+  opacity: 1;
+  font: 600 10px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+/* Advarsels-niveauet er svagere i baade farve og vaegt - det er en mistanke,
+   ikke en paastand. */
+.noai-yt-warn .noai-yt-mark {
+  background: #0d0d0f;
+  color: #8b8f98;
+  font-weight: 500;
+}

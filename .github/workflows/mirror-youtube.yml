@@ -1,0 +1,107 @@
+name: mirror youtube list
+
+# AiSList er CC BY-NC 4.0. Vi maa spejle og videredistribuere den saa laenge NoAI
+# aldrig tjener penge - se ATTRIBUTION.md. Samme grund til at spejle som ved
+# Spotify-listen: uden en fil vi selv ejer kan vi ikke fjerne nogen der klager.
+
+on:
+  schedule:
+    - cron: "43 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mirror-youtube
+  cancel-in-progress: false
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Hent, traek tilbagetrukne fra, og kontrollér
+        run: |
+          python3 - <<"PY"
+          import json, os, re, sys, urllib.request
+          from datetime import datetime, timezone
+          from urllib.parse import unquote
+
+          BASE = "https://raw.githubusercontent.com/Override92/AiSList/main/AiSList/"
+
+          # YouTube-haandtag maa indeholde unicode (koreansk, kinesisk, kyrillisk), og
+          # BAADE AiSList og YouTubes egne links skriver dem procent-kodede. Vi afkoder
+          # derfor begge sider til samme normalform - ellers matcher de aldrig.
+          # 473 af 21.165 poster faldt paa gulvet med en ren ASCII-regex.
+          def normaliser(h):
+              h = unquote(h.strip()).lower()
+              if not h.startswith("@") or len(h) < 2 or len(h) > 70:
+                  return None
+              if re.search(r"[\s/?#&]", h):
+                  return None
+              return h
+
+          def hent(navn):
+              raw = urllib.request.urlopen(BASE + navn, timeout=90).read()
+              if len(raw) > 4_000_000:
+                  sys.exit("%s er urimeligt stor: %d bytes" % (navn, len(raw)))
+              t = raw.decode("utf-8", "replace")
+              if t.lstrip()[:1] == "<":
+                  sys.exit("%s: fik HTML, ikke filterliste" % navn)
+              ud, kasseret = [], 0
+              for line in t.splitlines():
+                  line = line.strip()
+                  if not line or line.startswith("!"):
+                      continue
+                  # YouTube-haandtag er unikke uden hensyn til store/smaa bogstaver
+                  n = normaliser(line)
+                  if n: ud.append(n)
+                  else: kasseret += 1
+              if kasseret > len(ud) * 0.02:
+                  sys.exit("%s: %d ugyldige linjer - formatet har aendret sig?" % (navn, kasseret))
+              return sorted(set(ud))
+
+          block = hent("aislist_blocklist.txt")
+          warn  = hent("aislist_warnlist.txt")
+          if len(block) < 1000:
+              sys.exit("kun %d i blocklisten - afbryder" % len(block))
+
+          fjernet = set()
+          if os.path.exists("mirror/retracted-youtube.csv"):
+              for line in open("mirror/retracted-youtube.csv"):
+                  n = normaliser(line.split("#")[0])
+                  if n: fjernet.add(n)
+          block = [h for h in block if h not in fjernet]
+          warn  = [h for h in warn  if h not in fjernet]
+
+          # Baandet maales EFTER tilbagetraekning, saa vi sammenligner ens med ens.
+          if os.path.exists("youtube.json"):
+              gammel = json.load(open("youtube.json"))
+              g = len(gammel.get("block", []))
+              if g and not (0.9 <= len(block) / g <= 1.1):
+                  sys.exit("bevaegelse uden for +/-10 %%: %d -> %d. Kraever et menneske." % (g, len(block)))
+
+          json.dump({
+              "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "source": "Override92/AiSList",
+              "license": "CC BY-NC 4.0",
+              "retracted": len(fjernet),
+              "count": len(block) + len(warn),
+              "block": block,
+              "warn": warn,
+          }, open("youtube.json", "w"), separators=(",", ":"))
+          open("/tmp/yt-count", "w").write("%d+%d" % (len(block), len(warn)))
+          print("%d blokeret, %d advaret (%d trukket tilbage)" % (len(block), len(warn), len(fjernet)))
+          PY
+
+      - name: Commit hvis der er noget nyt
+        run: |
+          git config user.name "noai-mirror"
+          git config user.email "noai-mirror@users.noreply.github.com"
+          git add youtube.json
+          git diff --staged --quiet && exit 0
+          git commit -m "youtube: $(cat /tmp/yt-count) channels"
+          git pull --rebase --autostash origin main
+          git push

@@ -10,6 +10,23 @@ lists have reported, and lets you override any of it.
 
 Full licence texts are in [`LICENSES/`](LICENSES/).
 
+## YouTube
+
+| Source | Licence | Used how |
+|---|---|---|
+| [Override92/AiSList](https://github.com/Override92/AiSList) | **CC BY-NC 4.0** | 21,078 channels reported as AI-generated, plus 939 flagged as possible. Mirrored here, refreshed every 6 hours. |
+
+AiSList keeps two tiers and so do we, because collapsing them would assert a
+confidence neither they nor we have:
+
+- **blocklist** — high confidence. NoAI dims these videos.
+- **warnlist** — medium confidence. NoAI only marks these. Never dimmed, never hidden.
+
+Full attribution, including the modifications we make, is in
+[`LICENSES/AiSList-CC-BY-NC-4.0.txt`](LICENSES/AiSList-CC-BY-NC-4.0.txt).
+
+**This is the licence that binds the project's finances.** See the note above.
+
 ## Not used
 
 **Zoundhub** (Soul Over AI's successor) is deliberately not used. It publishes no

@@ -9,6 +9,7 @@
 //  2) Leder-valg mellem flere Spotify-faner. Samme spoergsmaal, samme svar.
 
 const MIRROR_URL = "https://raw.githubusercontent.com/JayDK2/noai/main/blocklist.json";
+const MIRROR_YT  = "https://raw.githubusercontent.com/JayDK2/noai/main/youtube.json";
 const ALARM = "noai-refresh";
 const REFRESH_MIN = 360;             // 6 timer
 const HENT_TIMEOUT = 30000;
@@ -65,6 +66,61 @@ function validér(tekst, nuvaerendeAntal) {
   if (nuvaerendeAntal && ids.length < nuvaerendeAntal * SHRINK_FLOOR)
     throw new Error("listen krympede fra " + nuvaerendeAntal + " til " + ids.length);
   return { ...data, ids, dropped: kasseret };
+}
+
+// --- YouTube-listen -------------------------------------------------------
+// Samme regler som Spotify-listen: den hentede ERSTATTER den indbagte, sidste
+// gode liste beholdes ved fejl, og krympe-vaernet gaelder. Forskellen er de to
+// niveauer: block graatones, warn faar kun et maerke.
+
+async function sikrYtListe() {
+  const { ytlist } = await get("ytlist");
+  if (ytlist && Array.isArray(ytlist.block) && ytlist.block.length) return ytlist;
+  const r = await fetch(chrome.runtime.getURL("youtube.json"));
+  const froe = await r.json();
+  froe.origin = "bundled";
+  await set({ ytlist: froe });
+  return froe;
+}
+
+function validérYt(tekst, nuvaerendeAntal) {
+  let data;
+  try { data = JSON.parse(tekst); }
+  catch (e) { throw new Error("ikke gyldig JSON"); }
+  if (!data || !Array.isArray(data.block) || !Array.isArray(data.warn))
+    throw new Error("mangler block/warn");
+  const rent = (a) => a.filter((h) => typeof h === "string" && h.startsWith("@") && h.length < 71);
+  const block = rent(data.block), warn = rent(data.warn);
+  if (block.length < MIN_IDS) throw new Error("kun " + block.length + " kanaler");
+  if (nuvaerendeAntal && block.length < nuvaerendeAntal * SHRINK_FLOOR)
+    throw new Error("listen krympede fra " + nuvaerendeAntal + " til " + block.length);
+  return { ...data, block, warn };
+}
+
+let henterYt = null;
+
+async function opdatérYt() {
+  if (henterYt) return henterYt;
+  henterYt = (async () => {
+    const nuvaerende = await sikrYtListe();
+    const afbryd = new AbortController();
+    const ur = setTimeout(() => afbryd.abort(), HENT_TIMEOUT);
+    try {
+      const r = await fetch(MIRROR_YT, { cache: "no-cache", signal: afbryd.signal });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const tekst = await r.text();
+      if (tekst.length > MAX_BYTES) throw new Error("svar for stort");
+      const frisk = validérYt(tekst, nuvaerende.block.length);
+      frisk.origin = "mirror";
+      frisk.fetched_at = new Date().toISOString();
+      await set({ ytlist: frisk, ytError: null });
+      return { ok: true, count: frisk.block.length + frisk.warn.length };
+    } catch (e) {
+      await set({ ytError: { when: new Date().toISOString(), msg: String(e.message || e) } });
+      return { ok: false, error: String(e.message || e) };
+    } finally { clearTimeout(ur); henterYt = null; }
+  })();
+  return henterYt;
 }
 
 let henterNu = null;
@@ -146,6 +202,17 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
         });
         break;
       }
+      case "ytState": {
+        const i = await indstillinger();
+        const liste = await sikrYtListe();
+        svar({
+          enabled: i.enabled, hide: i.hide, allowlist: i.allowlist,
+          block: liste.block, warn: liste.warn,
+          meta: { generated_at: liste.generated_at, source: liste.source,
+                  origin: liste.origin, count: liste.block.length + liste.warn.length },
+        });
+        break;
+      }
       case "skipped": {
         const i = await indstillinger();
         i.stats.skipped += 1;
@@ -165,7 +232,7 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
         svar({ ok: true });
         break;
       }
-      case "refreshNow": svar(await opdatér()); break;
+      case "refreshNow": svar({ spotify: await opdatér(), youtube: await opdatérYt() }); break;
       default: svar({ ok: false, reason: "unknown" });
     }
   })();
@@ -183,16 +250,20 @@ chrome.runtime.onInstalled.addListener(async () => {
   try { await sikrListe(); } catch (e) {
     await set({ lastError: { when: new Date().toISOString(), msg: "seed: " + e.message } });
   }
+  try { await sikrYtListe(); } catch (e) {
+    await set({ ytError: { when: new Date().toISOString(), msg: "seed: " + e.message } });
+  }
 });
 
 chrome.runtime.onStartup.addListener(async () => {
   planlaeg();
   await sikrListe();
+  await sikrYtListe();
   // alarmer fyrer ikke mens browseren er lukket - tjek selv om listen er gammel
   const { blocklist } = await get("blocklist");
   const alder = blocklist && blocklist.fetched_at
     ? Date.now() - Date.parse(blocklist.fetched_at) : Infinity;
-  if (alder > REFRESH_MIN * 60 * 1000) opdatér();
+  if (alder > REFRESH_MIN * 60 * 1000) { opdatér(); opdatérYt(); }
 });
 
-chrome.alarms.onAlarm.addListener((a) => { if (a.name === ALARM) opdatér(); });
+chrome.alarms.onAlarm.addListener((a) => { if (a.name === ALARM) { opdatér(); opdatérYt(); } });

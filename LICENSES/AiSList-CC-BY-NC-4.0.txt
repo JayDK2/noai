@@ -1,0 +1,27 @@
+Attribution under Creative Commons Attribution-NonCommercial 4.0 International
+(CC BY-NC 4.0)
+
+  Creator:    Override92 and the AiSList community
+  Material:   AiSList — community-maintained lists of YouTube channels
+  Link:       https://github.com/Override92/AiSList
+  Homepage:   https://aisloplist.com
+  Licence:    https://creativecommons.org/licenses/by-nc/4.0/
+  Copyright:  Copyright (c) 2026 Override92 and AiSList contributors
+  Disclaimer: The material is provided under the licence's disclaimer of
+              warranties and limitation of liability, reproduced at the licence
+              link above.
+
+  Changes:    Yes. Changes were made. The two filter lists (aislist_blocklist.txt
+              and aislist_warnlist.txt) are parsed from Adblock Plus format into
+              JSON; each channel handle is percent-decoded and lowercased so that
+              non-Latin handles match YouTube's own links; duplicates are removed;
+              and any handle listed in mirror/retracted-youtube.csv is subtracted.
+              The two tiers are kept separate and are NOT merged: the blocklist
+              dims a video, the warnlist only marks it.
+
+NONCOMMERCIAL IS A CONDITION OF USE, NOT A PREFERENCE. NoAI accepts no money —
+no donation link, no paid tier, no sponsorship — and it may not start, because
+"NonCommercial" means "not primarily intended for or directed towards commercial
+advantage or monetary compensation" (CC BY-NC 4.0 §1(i)). A donation button
+placed next to this data would arguably breach the licence. If money ever enters
+the project, this data has to come out first.
