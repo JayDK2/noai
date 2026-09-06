@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "NoAI — AI Music Filter",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dims or filters tracks reported as AI-generated on the Spotify web player, using a community-maintained list.",
   "permissions": ["storage", "alarms"],
   "host_permissions": ["https://raw.githubusercontent.com/JayDK2/noai/*"],
