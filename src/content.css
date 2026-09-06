@@ -84,3 +84,20 @@
   box-shadow: 0 0 5px #ff4d4d, 0 0 10px rgba(255, 77, 77, .45);
 }
 #noai-toast.noai-vis { visibility: visible; }
+
+/* Kunstner-links i kort (forside, soegning, hylder). Kortet selv kan ikke rammes
+   forsvarligt - det har kun hashede klassenavne - saa vi maerker navnet. */
+a.noai-link { opacity: .55; }
+
+.noai-link-mark {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 4px;
+  border-radius: 2px;
+  background: #0a0806;
+  color: #d9b25f;
+  font: 600 9px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: .04em;
+  vertical-align: 1px;
+  cursor: help;
+}
