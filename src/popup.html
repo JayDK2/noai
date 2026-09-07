@@ -32,10 +32,16 @@
     color-scheme: dark;
     --panel-hi:   #23262d;
     --panel-lo:   #101216;
-    --etch:       #8b93a1;   /* engraved label grey        */
-    --etch-dim:   #565d6a;
-    --etch-mid:   #6e7686;   /* hints: dim-but-legible (≥4.5:1 on the panel) */
-    --etch-hi:    #cfd5de;
+    /* Maalt paa det faerdige panel og haevet derefter. Foer laa forklaringerne -
+       den stoerste tekstmaengde - paa 4,28:1, altsaa UNDER WCAG AA, og de mindste
+       etiketter paa 2,95:1. Graveret metal skal vaere daempet, men daempet er ikke
+       det samme som utydeligt: naar teksten falder ind i pladen, laeser man den
+       ikke, man gaetter den. Vaerdierne herunder er valgt til maal-kontraster,
+       ikke til en fornemmelse. */
+    --etch:       #b3bac6;   /* primaere etiketter   ~9,3:1 (var 6,3) */
+    --etch-mid:   #9ba3b1;   /* forklaringer         ~7,0:1 (var 4,3 - dumpede AA) */
+    --etch-dim:   #838b9a;   /* mindste gravering    ~5,0:1 (var 3,0 - dumpede AA) */
+    --etch-hi:    #e4e8ee;   /* fremhaevet                                        */
     --lcd-amber:  #ffb454;
     --lcd-amber-dim: rgba(255,180,84,0.48);
     --lcd-bg:     #0a0806;
@@ -486,7 +492,7 @@
     text-decoration: none;
   }
   .footer a:hover { color: var(--lcd-amber); }
-  .footer-links span { color: #363b44; }
+  .footer-links span { color: var(--etch-dim); }   /* stod paa 1,74:1 - naesten usynlig */
 
   :focus-visible { outline: 1px solid var(--lcd-amber); outline-offset: 1px; }
 </style>
