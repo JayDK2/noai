@@ -16,6 +16,12 @@ function advarsel() {
   // ikke, og uden denne besked ville brugeren aldrig faa det at vide.
   // NB: pr. site. Med én faelles noegle slettede en sund YouTube-fane en levende
   // Spotify-fejlmelding, og vagten sagde stort set altid "alt vel".
+  // En taendt kontakt uden adgang er en tavs inaktiv funktion. Sig det.
+  if ((state.c2pa || state.rules) && !state.sideAdgang)
+    return "Site access has been withdrawn, so " +
+           (state.c2pa && state.rules ? "Content Credentials and site rules are"
+            : state.c2pa ? "Content Credentials is" : "site rules are") +
+           " not running. Switch the setting off and on again to restore it.";
   if (state.killSwitch && state.killSwitch.active)
     return "Filtering is paused remotely because the list source has a problem" +
            (state.killSwitch.reason ? ": " + state.killSwitch.reason : "") +

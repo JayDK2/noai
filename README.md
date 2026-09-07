@@ -46,7 +46,16 @@ site, not just the two above.
 
 This is the whole philosophy in one feature: NoAI has no AI detector and never
 will. It reads what the file says about itself, and says so in those words —
-*declared by the file*, not *proven*. Signature verification would need a full
+*declared by the file*, not *proven*.
+
+**Expect few marks, and expect none at all in the obvious places.** A Content
+Credential only survives if nobody re-encodes the file, and almost everyone does.
+Google Images serves stripped proxy thumbnails — we measured a search for
+"pictures made with ai": of 268 images, 177 were inline data URIs and 78 were
+Google's own re-encoded thumbnails, none carrying any credential or even EXIF.
+Instagram, X and Facebook strip them too. The feature works where the original
+file reaches you: a photographer's own site, a news outlet that preserves
+provenance, a direct link to the file. Signature verification would need a full
 C2PA library and a certificate chain, and a forged claim that something **is**
 AI is not an attack anyone has reason to mount.
 

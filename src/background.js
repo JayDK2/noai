@@ -591,6 +591,10 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
           lastError: lastError || null,
           sidsteSide: (await get("sidsteSide")).sidsteSide || null,
           rulesAvailable: REGEL_VAERTER.length > 0,
+          // Indstillingen kan staa taendt mens adgangen er vaek - fx hvis brugeren
+          // har trukket den tilbage i browserens egne indstillinger. Saa er
+          // funktionen inaktiv, og det skal siges, ikke skjules.
+          sideAdgang: await chrome.permissions.contains({ origins: ["<all_urls>"] }),
           // En fejlet regel-hentning var usynlig: popup en viste de tre andre
           // fejlkilder og ikke denne.
           rulesError: rulesError || rulesScriptError || null,
