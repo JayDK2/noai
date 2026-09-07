@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
   "name": "NoAI — AI Content Filter",
-  "version": "0.8.1",
+  "version": "0.9.0",
   "description": "Dims tracks and videos reported as AI-generated on Spotify Web and YouTube, and marks images whose own file declares AI.",
   "permissions": [
     "storage",
     "alarms",
     "scripting",
-    "contextMenus",
+    "contextMenus"
+  ],
+  "optional_permissions": [
     "notifications"
   ],
   "host_permissions": [
@@ -46,8 +48,7 @@
     },
     {
       "matches": [
-        "https://www.youtube.com/*",
-        "https://m.youtube.com/*"
+        "https://www.youtube.com/*"
       ],
       "js": [
         "src/content-youtube.js"

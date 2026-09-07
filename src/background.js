@@ -22,6 +22,9 @@ const SHRINK_FLOOR = 0.8;            // krympe-vaern, relativt til nuvaerende
 const MAX_UGYLDIGE = 0.02;           // andel daarlige id er vi accepterer og smider vaek
 const ID_RE = /^[A-Za-z0-9]{22}$/;
 
+const get = (k) => chrome.storage.local.get(k);
+const set = (o) => chrome.storage.local.set(o);
+
 // Funktion, ikke konstant: en delt default ville blive muteret af stats-taelleren
 // og forurene alle senere laesninger i workerens levetid.
 const standard = () => ({
@@ -72,7 +75,7 @@ async function opdatérC2paScript() {
   const { c2pa } = await get("c2pa");
   const harLov = await chrome.permissions.contains({ origins: ["<all_urls>"] });
   const skalKoere = !!c2pa && harLov;
-  let registreret = false;
+  let registreret;
   try {
     const nu = await chrome.scripting.getRegisteredContentScripts({ ids: [C2PA_SCRIPT_ID] });
     registreret = nu.length > 0;
@@ -97,13 +100,6 @@ const C2PA_BYTES = 262144;     // foerste 256 KB - manifestet ligger foran bille
 const C2PA_CACHE_MAX = 500;
 const c2paCache = new Map();
 
-// compositeWith... INDEHOLDER trainedAlgorithmicMedia som delstreng, saa den skal
-// proeves foerst - ellers er den anden post doed kode, og vi taber en skelnen
-// specifikationen giver os gratis: "helt genereret" er ikke det samme som
-// "indeholder AI-elementer", og brugeren bryder sig om forskellen.
-const AI_KOMPOSIT = "compositeWithTrainedAlgorithmicMedia";
-const AI_HELT = "trainedAlgorithmicMedia";
-
 // To trin med vilje: foerst 256 KB for at se OM filen overhovedet baerer et
 // manifest (det gaelder de faerreste billeder), og kun ved traef hentes hele filen
 // og laeses rigtigt. Ét trin ville enten hente alt for meget eller afskaere store
@@ -115,6 +111,13 @@ async function c2paTjek(url) {
   let dom = "none";
   let ekstra = null;
   let fejlede = false;
+  // Denne manglede. Anden hentning brugte "afbryd", som kun var erklaeret i TRE
+  // ANDRE funktioner - altsaa en ReferenceError, som den ydre catch slugte, saa
+  // hvert billede over 256 KB med credentials svarede "ingen". Laeseren koerte
+  // dermed aldrig paa netop de filer der oftest baerer et manifest, og fordi
+  // fejlen ikke caches blev de 256 KB hentet forgaeves ved hvert gennemsyn.
+  const afbryd = new AbortController();
+  const ur = setTimeout(() => afbryd.abort(), HENT_TIMEOUT);
   try {
     // force-cache rammer browserens egen cache, saa vi som regel IKKE laver et
     // ekstra netvaerkskald for et billede siden allerede har hentet.
@@ -134,8 +137,12 @@ async function c2paTjek(url) {
         // kan ikke skelne filens EGET krav fra en ingrediens, og et kamerabillede
         // med én AI-genereret ting indsat ville ellers blive kaldt AI.
         let hel = buf;
-        const cl = Number(r.headers.get("content-range") || "").valueOf();
-        if (buf.byteLength >= C2PA_BYTES) {
+        // Svarede serveren 200 i stedet for 206, ignorerede den vores Range og vi
+        // har allerede HELE filen. At hente igen ville koste dobbelt baandbredde
+        // for ingenting - og den anden hentning rammer alligevel ikke cachen,
+        // fordi en gemt 206 ikke kan besvare en fuld foresporgsel.
+        const helFilAlleredeHentet = r.status === 200;
+        if (!helFilAlleredeHentet && buf.byteLength >= C2PA_BYTES) {
           const r2 = await fetch(url, { cache: "force-cache", credentials: "omit", signal: afbryd.signal });
           if (r2.ok) {
             const b2 = await r2.arrayBuffer();
@@ -147,6 +154,8 @@ async function c2paTjek(url) {
           if (a.har) {
             dom = a.dom;
             ekstra = { ingrediensAI: !!a.ingrediensAI,
+                       afledtAfAI: !!a.afledtAfAI,          // forældre-ingrediens erklærer AI
+                       medAIKomponent: !!a.medAIKomponent,  // en indsat del erklærer AI
                        generator: (a.aktivt && a.aktivt.generator) || null,
                        kaede: a.kaede || [] };
           } else { dom = "credentials"; }
@@ -157,7 +166,7 @@ async function c2paTjek(url) {
         }
       }
     }
-  } catch (e) { fejlede = true; }
+  } catch (e) { fejlede = true; } finally { clearTimeout(ur); }
   // En 429, en timeout eller et 403 (hotlink-vaern, udloebne signerede URL er) maa
   // IKKE cementeres som "ingen credentials" for workerens levetid. Vi cacher kun
   // rigtige svar.
@@ -168,9 +177,6 @@ async function c2paTjek(url) {
   }
   return svar;
 }
-
-const get = (k) => chrome.storage.local.get(k);
-const set = (o) => chrome.storage.local.set(o);
 
 async function indstillinger() {
   const d = standard();
@@ -193,7 +199,7 @@ async function sikrListe() {
 function validér(tekst, nuvaerendeAntal) {
   let data;
   try { data = JSON.parse(tekst); }
-  catch (e) { throw new Error("ikke gyldig JSON (fejlside serveret som 200?)"); }
+  catch (e) { throw new Error("ikke gyldig JSON (fejlside serveret som 200?)", { cause: e }); }
   if (!data || !Array.isArray(data.ids)) throw new Error("mangler ids-array");
   const ids = data.ids.filter((i) => typeof i === "string" && ID_RE.test(i));
   const kasseret = data.ids.length - ids.length;
@@ -225,7 +231,7 @@ async function sikrYtListe() {
 function validérYt(tekst, nuvaerendeAntal) {
   let data;
   try { data = JSON.parse(tekst); }
-  catch (e) { throw new Error("ikke gyldig JSON"); }
+  catch (e) { throw new Error("ikke gyldig JSON", { cause: e }); }
   if (!data || !Array.isArray(data.block) || !Array.isArray(data.warn))
     throw new Error("mangler block/warn");
   const rent = (a) => a.filter((h) => typeof h === "string" && h.startsWith("@") && h.length < 71);
@@ -328,6 +334,19 @@ const REGEL_MAX = 40;
 // fjernet. Er listen tom, henter og registrerer motoren intet overhovedet.
 const REGEL_VAERTER = [];
 
+// Et vaertsnavn skal ogsaa vaere et GYLDIGT vaertsnavn, ikke bare bestaa af
+// tilladte tegn: ".." bestaar tegn-tjekket, giver et ugyldigt match-moenster, og
+// registerContentScripts kaster - for ALLE vaerter i samme kald. Hver vaert
+// registreres derfor for sig, og et navn valideres foer det bruges.
+const VAERT_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
+const gyldigVaert = (h) => typeof h === "string" && h.length <= 253 && VAERT_RE.test(h);
+
+// Det lukkede ordforraad for etiketter. Reglen baerer NOEGLEN; teksten bor i
+// content-rules.js (TEKSTER) og skal have praecis disse noegler - check.mjs
+// haandhaever det. En hentet fil kan dermed vaelge mellem vores ord, aldrig
+// skrive sine egne.
+const REGEL_ETIKETTER = ["platform-ai", "platform-possible", "reported-ai", "possibly-ai"];
+
 async function sikrRegler() {
   const { rulesData } = await get("rulesData");
   if (rulesData && Array.isArray(rulesData.rules)) return rulesData;
@@ -349,11 +368,11 @@ function validérRegler(tekst) {
     r && typeof r.id === "string" && Array.isArray(r.hosts) && r.hosts.length &&
     // Vaerten SKAL staa i den laaste liste. En regel der naevner noget andet
     // kasseres praecis som en misdannet regel - den fortolkes ikke.
-    r.hosts.every((h) => typeof h === "string" && REGEL_VAERTER.includes(h)) &&
+    r.hosts.every((h) => gyldigVaert(h) && REGEL_VAERTER.includes(h)) &&
     typeof r.container === "string" && r.container.length < 200 &&
     typeof r.signal === "string" && r.signal.length < 200 &&
     (r.tier === "block" || r.tier === "warn") &&
-    typeof r.label === "string" && r.label.length < 80);
+    REGEL_ETIKETTER.includes(r.label));
   if (rene.length !== d.rules.length) throw new Error("regelfilen indeholdt ugyldige poster");
   return { ...d, rules: rene.slice(0, REGEL_MAX) };
 }
@@ -385,31 +404,41 @@ async function opdatérRegler() {
   return henterRegler;
 }
 
-const REGEL_SCRIPT_ID = "noai-rules";
+const REGEL_SCRIPT_PRAEFIKS = "noai-rules:";
 
+// Én registrering PR. VAERT, og fejl der siges hoejt. Foerste udgave lagde alle
+// vaerter i ét kald inde i én slugt try: én misdannet vaert vaeltede hele
+// registreringen, ingen vaert fik scriptet, og ingen fik det at vide.
 async function opdatérRegelScript() {
   if (!REGEL_VAERTER.length) return false;    // motoren er inaktiv i denne udgave
   const i = await indstillinger();
   const d = await sikrRegler();
-  const hosts = REGEL_VAERTER;                 // ALDRIG fra den hentede fil
   const skalKoere = !!i.rules && d.rules.length > 0;
-  let registreret = false;
+  let registrerede = [];
   try {
-    registreret = (await chrome.scripting.getRegisteredContentScripts({ ids: [REGEL_SCRIPT_ID] })).length > 0;
-  } catch (e) {}
+    registrerede = (await chrome.scripting.getRegisteredContentScripts())
+      .map((s) => s.id).filter((id) => id.startsWith(REGEL_SCRIPT_PRAEFIKS));
+  } catch (e) { /* ingen registreringer at rydde */ }
+  const fejl = [];
   try {
-    if (registreret) await chrome.scripting.unregisterContentScripts({ ids: [REGEL_SCRIPT_ID] });
-    if (skalKoere) {
-      await chrome.scripting.registerContentScripts([{
-        id: REGEL_SCRIPT_ID,
-        matches: hosts.map((h) => "https://" + h + "/*"),   // aldrig http
-        js: ["src/content-rules.js"],
-        css: ["src/content-rules.css"],
-        runAt: "document_idle",
-      }]);
+    if (registrerede.length) await chrome.scripting.unregisterContentScripts({ ids: registrerede });
+  } catch (e) { fejl.push("afregistrering: " + (e && e.message)); }
+  if (skalKoere) {
+    for (const h of REGEL_VAERTER) {           // ALDRIG fra den hentede fil
+      if (!gyldigVaert(h)) { fejl.push(h + ": ugyldigt vaertsnavn"); continue; }
+      try {
+        await chrome.scripting.registerContentScripts([{
+          id: REGEL_SCRIPT_PRAEFIKS + h,
+          matches: ["https://" + h + "/*"],    // aldrig http
+          js: ["src/content-rules.js"],
+          css: ["src/content-rules.css"],
+          runAt: "document_idle",
+        }]);
+      } catch (e) { fejl.push(h + ": " + (e && e.message)); }
     }
-  } catch (e) {}
-  return skalKoere;
+  }
+  await set({ rulesScriptError: fejl.length ? { when: new Date().toISOString(), msg: fejl.join("; ") } : null });
+  return skalKoere && fejl.length < REGEL_VAERTER.length;
 }
 
 // --- opslag ---------------------------------------------------------------
@@ -455,26 +484,55 @@ async function slaaOp(raa) {
 // post man holder oeje med tilfoejet eller fjernet, faar man besked. Det er hele
 // pointen: man kan ikke selv opdage at man er havnet paa en fremmed liste.
 
+// notifications er en VALGFRI tilladelse, bedt om foerste gang brugeren saetter
+// noget paa overvaagning. Uden den er der intet at melde til - og create ville
+// kaste. Tjek frem for at fange.
+async function maaNotificere() {
+  try { return await chrome.permissions.contains({ permissions: ["notifications"] }); }
+  catch (e) { return false; }
+}
+
+const MELD_ENKELTVIS_MAX = 3;
+
 async function meldAendring(kind, foer, efter) {
   const i = await indstillinger();
   const vagt = (i.watchlist || []).filter((w) => w.kind === kind);
   if (!vagt.length) return;
   const gammel = new Set(foer), ny = new Set(efter);
+  const aendrede = [];
   for (const w of vagt) {
     const var_ = gammel.has(w.id), er = ny.has(w.id);
-    if (var_ === er) continue;
-    const navn = w.label || w.id;
-    try {
-      await chrome.notifications.create("noai-" + kind + "-" + w.id + "-" + Date.now(), {
-        type: "basic",
-        iconUrl: chrome.runtime.getURL("icons/icon128.png"),
-        title: er ? "Added to a filter list" : "Removed from a filter list",
-        message: navn + (er
-          ? " has been added to the " + (kind === "youtube" ? "YouTube" : "Spotify") + " list."
-          : " is no longer on the " + (kind === "youtube" ? "YouTube" : "Spotify") + " list."),
-      });
-    } catch (e) { /* notifikationer kan vaere slaaet fra - det maa ikke vaelte opdateringen */ }
+    if (var_ !== er) aendrede.push({ navn: w.label || w.id, id: w.id, er });
   }
+  if (!aendrede.length || !(await maaNotificere())) return;
+  const liste = kind === "youtube" ? "YouTube" : "Spotify";
+  const vis = (id, o) => chrome.notifications.create(id, {
+    type: "basic", iconUrl: chrome.runtime.getURL("icons/icon128.png"), ...o,
+  });
+  try {
+    // Faa aendringer: én besked hver. Mange: én samlet. Uden loftet gav en
+    // listeopdatering én notifikation pr. post, og id'erne bar Date.now(), saa
+    // de hobede sig op i stedet for at erstatte hinanden. Id'et er nu stabilt
+    // pr. post: en ny opdatering om samme post erstatter den gamle besked.
+    if (aendrede.length <= MELD_ENKELTVIS_MAX) {
+      for (const a of aendrede) {
+        await vis("noai-" + kind + "-" + a.id, {
+          title: a.er ? "Added to a filter list" : "Removed from a filter list",
+          message: a.navn + (a.er ? " has been added to the " + liste + " list."
+                                  : " is no longer on the " + liste + " list."),
+        });
+      }
+    } else {
+      const tilfoejet = aendrede.filter((a) => a.er).length;
+      const fjernet = aendrede.length - tilfoejet;
+      await vis("noai-" + kind + "-samlet", {
+        title: aendrede.length + " of your watched entries changed",
+        message: "On the " + liste + " list: " +
+          [tilfoejet && tilfoejet + " added", fjernet && fjernet + " removed"].filter(Boolean).join(", ") +
+          ". First: " + aendrede.slice(0, 3).map((a) => a.navn).join(", ") + ".",
+      });
+    }
+  } catch (e) { /* notifikationer kan vaere slaaet fra i systemet - det maa ikke vaelte opdateringen */ }
 }
 
 // --- maa denne fane skippe? -----------------------------------------------
@@ -503,6 +561,13 @@ function maaSkippe(sender) {
 
 // --- beskeder -------------------------------------------------------------
 
+// Én noegle pr. side i tally og selectorTrouble. Tre skrivere deler dem: Spotify,
+// YouTube og regel-siderne ("rules:<vaert>"). Alt ukendt lander hos Spotify.
+const siteNoegle = (raa) =>
+  raa === "youtube" ? "youtube"
+  : /^rules:[a-z0-9.-]{1,253}$/.test(String(raa || "")) ? raa
+  : "spotify";
+
 chrome.runtime.onMessage.addListener((msg, sender, svar) => {
   if (msg && msg.type === "maySkip") { svar(maaSkippe(sender)); return false; }
   (async () => {
@@ -511,9 +576,10 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
         const i = await indstillinger();
         const liste = await sikrListe();
         const { killSwitch } = await get("killSwitch");
-        const { lastError, skipStopped, selectorTrouble, ytError } =
-          await get(["lastError", "skipStopped", "selectorTrouble", "ytError"]);
+        const { lastError, skipStopped, selectorTrouble, ytError, rulesError, rulesScriptError } =
+          await get(["lastError", "skipStopped", "selectorTrouble", "ytError", "rulesError", "rulesScriptError"]);
         const ytListe = await sikrYtListe();
+        const regelData = REGEL_VAERTER.length ? await sikrRegler() : null;
         svar({
           ...i,
           // En aktiv noed-kontakt slaar filteret fra, uanset brugerens indstilling.
@@ -525,6 +591,11 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
           lastError: lastError || null,
           sidsteSide: (await get("sidsteSide")).sidsteSide || null,
           rulesAvailable: REGEL_VAERTER.length > 0,
+          // En fejlet regel-hentning var usynlig: popup en viste de tre andre
+          // fejlkilder og ikke denne.
+          rulesError: rulesError || rulesScriptError || null,
+          rulesMeta: regelData ? { generated_at: regelData.generated_at, count: regelData.rules.length,
+                                   origin: regelData.origin } : null,
           ytError: ytError || null,
           ytMeta: { generated_at: ytListe.generated_at, source: ytListe.source,
                     count: ytListe.block.length + ytListe.warn.length },
@@ -550,13 +621,20 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
         const dag = new Date().toISOString().slice(0, 10);
         const t = { ...(i.tally || {}) };
         const d = { ...(t[dag] || {}) };
-        const site = msg.site === "youtube" ? "youtube" : "spotify";
+        // Tre skrivere deler nu noeglen. Uden "rules:"-grenen ville en knaekket
+        // regel skrive i Spotifys plads - og en sund regel-side SLETTE en levende
+        // Spotify-fejlmelding. Praecis den fejl vi rettede sidste runde.
+        const site = siteNoegle(msg.site);
         const s0 = d[site] || { flagged: 0, total: 0 };
         d[site] = { flagged: s0.flagged + (msg.flagged | 0), total: s0.total + (msg.total | 0) };
         t[dag] = d;
         // hold 30 dage, ikke mere
         for (const k of Object.keys(t).sort().slice(0, -30)) delete t[k];
-        await set({ tally: t, sidsteSide: { site, flagged: msg.flagged | 0, total: msg.total | 0 } });
+        // sidsteSide er sidens TOTAL, ikke tilvaeksten. Gemte vi tilvaeksten,
+        // ville popup ens "this page" vise den sidste stigning i stedet for hvad
+        // brugeren faktisk har set.
+        await set({ tally: t, sidsteSide: { site,
+          flagged: msg.pageFlagged | 0, total: msg.pageTotal | 0 } });
         svar({ ok: true });
         break;
       }
@@ -601,8 +679,12 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
         // Pr. site. Med én faelles noegle slettede en sund YouTube-fane en levende
         // Spotify-fejlmelding og omvendt - og med begge sider aabne, som er det
         // normale for denne udvidelse, ville vagten stort set altid sige "alt vel".
-        const site = msg.site === "youtube" ? "youtube" : "spotify";
-        const brudte = Array.isArray(msg.broken) ? msg.broken : [];
+        // Regel-siderne ("rules:<vaert>") SKAL ogsaa have deres egen plads: uden
+        // den landede de i Spotifys, og en sund regel-side slettede en levende
+        // Spotify-melding - samme fejl som tally-grenen fik rettet.
+        const site = siteNoegle(msg.site);
+        const brudte = (Array.isArray(msg.broken) ? msg.broken : [])
+          .filter((x) => typeof x === "string" && x.length < 80).slice(0, 40);
         const { selectorTrouble } = await get("selectorTrouble");
         const nu = { ...(selectorTrouble || {}) };
         if (brudte.length) nu[site] = { at: Date.now(), broken: brudte };
@@ -612,8 +694,31 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
         break;
       }
       case "setOption": {
-        const tilladt = ["enabled", "skip", "hide", "allowlist", "allowNames", "c2pa"];
-        if (tilladt.includes(msg.key)) await set({ [msg.key]: msg.value });
+        // "rules" og "watchlist" MANGLEDE her. Popup ens "Watch this" sendte
+        // altsaa noget der blev smidt vaek i stilhed: overvaagningslisten blev
+        // aldrig gemt, meldAendring havde aldrig noget at melde, og hele
+        // funktionen var doed uden én fejl nogen steder. Praecis den fejltype.
+        const tilladt = ["enabled", "skip", "hide", "allowlist", "allowNames", "c2pa", "rules", "watchlist"];
+        if (!tilladt.includes(msg.key)) { svar({ ok: false, reason: "unknown-key" }); break; }
+        let vaerdi = msg.value;
+        if (msg.key === "watchlist") {
+          vaerdi = (Array.isArray(vaerdi) ? vaerdi : []).filter((w) => w &&
+            (w.kind === "spotify" || w.kind === "youtube") && typeof w.id === "string" && w.id.length < 80)
+            .map((w) => ({ kind: w.kind, id: w.id, label: typeof w.label === "string" ? w.label.slice(0, 120) : w.id }))
+            .slice(0, 200);
+        }
+        if (msg.key === "allowlist") {
+          vaerdi = (Array.isArray(vaerdi) ? vaerdi : []).filter((x) => typeof x === "string");
+          // Navnene foelger listen: et id der forlader allowlist skal ogsaa
+          // forlade allowNames, ellers vokser navnetabellen for evigt.
+          const { allowNames } = await get("allowNames");
+          const behold = new Set(vaerdi);
+          const navne = {};
+          for (const [id, n] of Object.entries(allowNames || {})) if (behold.has(id)) navne[id] = n;
+          await set({ allowlist: vaerdi, allowNames: navne });
+        } else {
+          await set({ [msg.key]: vaerdi });
+        }
         if (msg.key === "c2pa") await opdatérC2paScript();
         if (msg.key === "rules") await opdatérRegelScript();
         svar({ ok: true });
@@ -657,21 +762,51 @@ function byggMenuer() {
   });
 }
 
-chrome.contextMenus.onClicked.addListener(async (info) => {
+// Navnet bag et Spotify-link. Chrome giver os ikke linkets tekst (linkText er
+// Firefox), saa vi spoerger indholds-scriptet i fanen, som kan slaa linket op i
+// DOM en. Paa andre sider end open.spotify.com er der intet script - saa id.
+async function navnForLink(tab, t) {
+  if (t.kind === "youtube") return t.id;              // @haandtaget ER navnet
+  if (!tab || typeof tab.id !== "number") return t.id;
+  try {
+    const r = await chrome.tabs.sendMessage(tab.id, { type: "artistNavn", id: t.id });
+    return (r && typeof r.navn === "string" && r.navn.trim()) || t.id;
+  } catch (e) { return t.id; }
+}
+
+// Kvittering uden notifikations-tilladelsen: et kort maerke paa ikonet.
+let maerkeUr = 0;
+async function kvitterPaaIkon(tekst) {
+  try {
+    await chrome.action.setBadgeBackgroundColor({ color: "#3ddc84" });
+    await chrome.action.setBadgeText({ text: tekst });
+    clearTimeout(maerkeUr);
+    maerkeUr = setTimeout(() => chrome.action.setBadgeText({ text: "" }), 4000);
+  } catch (e) { /* ikonet er ikke afgoerende */ }
+}
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const t = tolkLink(info.linkUrl);
   if (!t) return;
   if (info.menuItemId === MENU_TILLAD) {
     const i = await indstillinger();
     const liste = new Set(i.allowlist || []);
     liste.add(t.id);
-    await set({ allowlist: [...liste] });
-    try {
-      await chrome.notifications.create("noai-allow-" + Date.now(), {
-        type: "basic", iconUrl: chrome.runtime.getURL("icons/icon128.png"),
-        title: "Never filtering this again",
-        message: t.id + " has been added to your allowlist.",
-      });
-    } catch (e) {}
+    // OGSAA navnet. Foerste udgave skrev kun allowlist, saa poster tilfoejet
+    // herfra stod som raa 22-tegns-id'er i praecis den liste brugeren skal
+    // kunne laese for at fjerne dem igen.
+    const navn = await navnForLink(tab, t);
+    const navne = { ...(i.allowNames || {}), [t.id]: navn };
+    await set({ allowlist: [...liste], allowNames: navne });
+    if (await maaNotificere()) {
+      try {
+        await chrome.notifications.create("noai-allow-" + t.id, {
+          type: "basic", iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+          title: "Never filtering this again",
+          message: navn + " has been added to your allowlist.",
+        });
+      } catch (e) { kvitterPaaIkon("OK"); }
+    } else kvitterPaaIkon("OK");
     return;
   }
   if (info.menuItemId === MENU_MELD) {

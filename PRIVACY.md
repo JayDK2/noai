@@ -92,7 +92,9 @@ Switching the feature off removes the site permission again.
 ### Notifications and right-click menus
 
 If you put an artist or channel on your watchlist, NoAI shows you a notification
-when the filter list adds or removes them. The notification is generated on your
+when the filter list adds or removes them. The browser asks for notification
+permission the first time you watch something; it is not requested at install.
+The notification is generated on your
 machine from the list you already downloaded. No server is involved and nothing
 is sent.
 

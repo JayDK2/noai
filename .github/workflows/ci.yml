@@ -8,10 +8,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: "22" }
+        with: { node-version: "22", cache: "npm" }
+      - name: Installér lint-værktøj
+        run: npm ci --no-audit --no-fund
       - name: Syntaks
         run: for f in src/*.js; do node --check "$f"; done
+      # no-undef alene ville have fanget "afbryd": brugt i én funktion, erklæret
+      # i tre andre - en ReferenceError den ydre catch slugte, så hvert billede
+      # over 256 KB med credentials svarede "ingen".
+      - name: ESLint
+        run: npx eslint .
       - name: Statisk kontrol
         run: node tools/check.mjs
-      - name: C2PA-laeser mod rigtige fixtures
+      - name: C2PA-læser mod rigtige fixtures
         run: node tools/test_c2pa.mjs

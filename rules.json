@@ -1,6 +1,6 @@
 {
   "generated_at": null,
   "schema": 1,
-  "note": "Rules may only name hosts that are pinned in the reviewed build (REGEL_VAERTER in src/background.js). A rule naming any other host is discarded, exactly like a malformed one. With no pinned hosts the engine fetches nothing, registers nothing, and shows no control.",
+  "note": "Rules may only name hosts that are pinned in the reviewed build (REGEL_VAERTER in src/background.js). A rule naming any other host is discarded, exactly like a malformed one. With no pinned hosts the engine fetches nothing, registers nothing, and shows no control. The label field is a KEY from the closed vocabulary in src/content-rules.js (TEKSTER), never free text.",
   "rules": []
 }

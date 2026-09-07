@@ -20,14 +20,17 @@ function advarsel() {
     return "Filtering is paused remotely because the list source has a problem" +
            (state.killSwitch.reason ? ": " + state.killSwitch.reason : "") +
            ". It resumes automatically when the problem is fixed.";
-  const st = state.selectorTrouble;
-  if (st && (st.spotify || st.youtube)) {
-    const dele = [];
-    if (st.spotify) dele.push("Spotify (" + st.spotify.broken.join(", ") + ")");
-    if (st.youtube) dele.push("YouTube (" + st.youtube.broken.join(", ") + ")");
+  const st = state.selectorTrouble || {};
+  const dele = [];
+  if (st.spotify) dele.push("Spotify (" + st.spotify.broken.join(", ") + ")");
+  if (st.youtube) dele.push("YouTube (" + st.youtube.broken.join(", ") + ")");
+  // Regel-siderne melder under "rules:<vaert>" - én noegle pr. vaert.
+  for (const [k, v] of Object.entries(st))
+    if (k.startsWith("rules:") && v && Array.isArray(v.broken))
+      dele.push(k.slice(6) + " (" + v.broken.join(", ") + ")");
+  if (dele.length)
     return "The page layout has changed on " + dele.join(" and ") +
            ". Filtering may be incomplete. Please report this.";
-  }
   if (state.skipStopped)
     return "Stopped after " + state.skipStopped.after +
            " skips in a row. Use the player once to resume.";
@@ -35,9 +38,15 @@ function advarsel() {
     return "List update failed (" + state.lastError.msg + "). Still using the last good copy.";
   if (state.ytError)
     return "YouTube list update failed (" + state.ytError.msg + "). Still using the last good copy.";
-  // Begge lister overvaages. GitHub slukker planlagte robotter efter 60 dages
-  // stilhed, og saa er en gammel dato det eneste synlige tegn.
-  for (const [navn, meta] of [["Spotify", state.listMeta], ["YouTube", state.ytMeta || {}]]) {
+  // Regelfilen var den ene fejlkilde popup en ikke viste.
+  if (state.rulesAvailable && state.rulesError)
+    return "Site rules update failed (" + state.rulesError.msg + "). Still using the last good copy.";
+  // Alle lister der hentes af en planlagt robot overvaages. GitHub slukker
+  // planlagte robotter efter 60 dages stilhed, og saa er en gammel dato det
+  // eneste synlige tegn. Regelfilen er kun med naar motoren er aktiv.
+  const lister = [["Spotify", state.listMeta], ["YouTube", state.ytMeta || {}]];
+  if (state.rulesAvailable && state.rulesMeta) lister.push(["site rules", state.rulesMeta]);
+  for (const [navn, meta] of lister) {
     const d = DAGE(meta.generated_at);
     if (d !== null && d > 14)
       return "The " + navn + " list has not been updated in " + d +
@@ -113,7 +122,7 @@ async function indlaes() { state = await send({ type: "state" }); tegn(); }
 // der foerst om her - aldrig ved installation.
 async function bedOmAdgang(e, noegle) {
   if (e.target.checked) {
-    let fik = false;
+    let fik;
     try { fik = await chrome.permissions.request({ origins: ["<all_urls>"] }); }
     catch (err) { fik = false; }
     if (!fik) { e.target.checked = false; return; }
@@ -254,6 +263,17 @@ async function slaaOp() {
   b.type = "button";
   b.textContent = "Watch this";
   b.onclick = async () => {
+    // notifications er en VALGFRI tilladelse og bedes om HER - foerste gang
+    // noget saettes paa overvaagning - ikke ved installation. Uden den har en
+    // overvaagning ingen udvej, saa et nej betyder ingen overvaagning, sagt hoejt.
+    let lov;
+    try { lov = await chrome.permissions.request({ permissions: ["notifications"] }); }
+    catch (err) { lov = false; }
+    if (!lov) {
+      b.textContent = "Allow notifications to watch";
+      b.title = "Watching only works by notifying you when the list changes.";
+      return;
+    }
     const liste = (state.watchlist || []).filter((x) => !(x.kind === svar.kind && x.id === svar.id));
     liste.push({ kind: svar.kind, id: svar.id, label: svar.id });
     await send({ type: "setOption", key: "watchlist", value: liste });

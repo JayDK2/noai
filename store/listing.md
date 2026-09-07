@@ -80,7 +80,8 @@ remains the source the page is generated from.
 
 The extension fetches `rules.json` from the same repository path as its filter lists.
 A rule contains only: a list of hostnames, a CSS container selector, a CSS signal
-selector, a tier, and a label string.
+selector, a tier, and a label *key*. The key selects one of four label strings
+bundled in the extension; the fetched file cannot supply its own text.
 
 **This is data, not remotely hosted code.** The extension never evaluates fetched
 content. It calls `JSON.parse`, discards anything that does not match the exact
@@ -101,7 +102,7 @@ The feature is off by default and requires the user to grant site access.
 - `alarms` — Schedules the six-hourly filter-list update. A service worker cannot keep a timer alive without it.
 - `scripting` — Registers the image-scanning content script after the user grants the optional site permission, and unregisters it when they turn the feature off. It injects one bundled script; nothing is downloaded or evaluated.
 - `contextMenus` — Adds two right-click entries on a track or channel link: allowlist it, or report a mistake. No page content is read and nothing is transmitted.
-- `notifications` — Shows a local notification when an artist or channel on the user's watchlist is added to or removed from a filter list. Generated on the device from the list already downloaded; no server is involved and nothing is sent.
+- `notifications` (**optional**, in `optional_permissions`) — Not requested at install. Asked for the first time the user puts an artist or channel on their watchlist. Shows a local notification when a watched entry is added to or removed from a filter list. Generated on the device from the list already downloaded; no server is involved and nothing is sent.
 - `host_permissions` (one repository path on raw.githubusercontent.com) — Downloads the filter lists. Plain data, parsed with JSON.parse, never evaluated.
 - `optional_host_permissions` (`<all_urls>`) — **Not requested at install.** Granted by the user from the popup when they enable Content Credentials, and removed when they turn it off. Used to read the first 256 KB of images to see whether the file itself declares AI generation.
 

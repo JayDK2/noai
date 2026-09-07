@@ -63,7 +63,9 @@ instead of waiting weeks for an update to be approved.
 **Rules are data, never code.** This is the line the whole design depends on:
 
 - A rule is four strings: which hosts, which container, which signal element, and a
-  label to show. Nothing else is read.
+  label *key*. Nothing else is read. The words on screen are not in the rule: the
+  key selects one of a handful of labels the extension itself ships, so a fetched
+  file can choose between our phrasings but never write its own.
 - The only two actions are: add a class, and add a text label. There is no
   expression language, no callback, no script.
 - Nothing fetched is ever evaluated. `JSON.parse` and nothing else.

@@ -1,0 +1,15 @@
+{
+  "name": "noai",
+  "private": true,
+  "description": "NoAI - AI Content Filter (Chrome extension). Kun udviklingsvaerktoej; udvidelsen selv har ingen afhaengigheder.",
+  "scripts": {
+    "lint": "eslint .",
+    "check": "node tools/check.mjs",
+    "test": "node tools/test_c2pa.mjs"
+  },
+  "devDependencies": {
+    "eslint": "^10.10.0",
+    "@eslint/js": "^10.0.1",
+    "globals": "^17.12.0"
+  }
+}

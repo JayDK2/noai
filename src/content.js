@@ -229,21 +229,41 @@
   // selv. Vi tager den HOEJESTE vaerdi vi har set paa siden, ikke summen: hver
   // mutation koerer rensRaekker igen, og en sum ville taelle det samme mange gange.
   let taeltSti = "";
-  let hoejest = { flagged: 0, total: 0 };
+  let setteSpor = new Set();     // hvilke numre har vi FAKTISK set paa denne sti
+  let setteFlagede = new Set();
+  let ventende = { flagged: 0, total: 0 };
   let taelTimer = 0;
 
-  function taelOp(flagged, total) {
+  // Taeller DISTINKTE numre, ikke hvor mange raekker der er tegnet lige nu.
+  // Spotifys lister er virtualiserede: querySelectorAll giver kun de ~25 raekker
+  // der er i syne, saa "hoejeste sete antal" saturerede ved én skaerm og meldte
+  // "2 af 25" for en playliste med 500 numre. Det maalte hvor meget der var plads
+  // til, ikke hvad listen indeholdt.
+  function taelOp(raekker) {
     if (location.pathname !== taeltSti) {
       taeltSti = location.pathname;
-      hoejest = { flagged: 0, total: 0 };
+      setteSpor = new Set(); setteFlagede = new Set();
     }
-    if (total <= hoejest.total && flagged <= hoejest.flagged) return;
-    const nyF = Math.max(flagged, hoejest.flagged) - hoejest.flagged;
-    const nyT = Math.max(total, hoejest.total) - hoejest.total;
-    hoejest = { flagged: Math.max(flagged, hoejest.flagged), total: Math.max(total, hoejest.total) };
+    let nyF = 0, nyT = 0;
+    for (const r of raekker) {
+      const a = r.querySelector('a[href^="/track/"]');
+      const id = a ? a.getAttribute("href") : (r.innerText || "").slice(0, 60);
+      if (!id || setteSpor.has(id)) continue;
+      setteSpor.add(id); nyT++;
+      if (r.classList.contains("noai-flagged")) { setteFlagede.add(id); nyF++; }
+    }
     if (!nyT && !nyF) return;
+    // Laeg til det ventende i stedet for at kaste det vaek. Foerste udgave kaldte
+    // clearTimeout, som annullerede den ventende TILVAEKST og ikke bare timeren -
+    // saa 3 af 50 blev registreret som 1 af 10.
+    ventende.flagged += nyF; ventende.total += nyT;
     clearTimeout(taelTimer);
-    taelTimer = setTimeout(() => send({ type: "tally", site: "spotify", flagged: nyF, total: nyT }), 1200);
+    taelTimer = setTimeout(() => {
+      const v = ventende;
+      ventende = { flagged: 0, total: 0 };
+      send({ type: "tally", site: "spotify", flagged: v.flagged, total: v.total,
+             pageFlagged: setteFlagede.size, pageTotal: setteSpor.size });
+    }, 1200);
   }
 
   function rensRaekker() {
@@ -291,7 +311,7 @@
         }
       } else if (!flag && mrk) { mrk.remove(); }
     }
-    taelOp([...raekker].filter((r) => r.classList.contains("noai-flagged")).length, raekker.length);
+    taelOp(raekker);
   }
 
   // --- selektor-selvtest -----------------------------------------------------
@@ -377,6 +397,16 @@
     if (omraade === "local" &&
         (c.enabled || c.skip || c.hide || c.allowlist || c.blocklist || c.killSwitch))
       hentState();
+  });
+
+  // Hoejreklik-menuen i baggrunden faar kun linkets URL, ikke dets tekst. Den
+  // spoerger os om navnet, saa allowlisten viser "Kunstner" og ikke et 22-tegns-id.
+  chrome.runtime.onMessage.addListener((msg, sender, svar) => {
+    if (!msg || msg.type !== "artistNavn" || !/^[A-Za-z0-9]{22}$/.test(String(msg.id || ""))) return false;
+    const a = [...document.querySelectorAll('a[href^="/artist/' + msg.id + '"]')]
+      .find((x) => x.textContent.trim());
+    svar({ navn: a ? a.textContent.trim() : "" });
+    return false;
   });
 
   document.addEventListener("click", brugerRoerte, true);

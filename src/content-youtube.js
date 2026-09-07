@@ -77,22 +77,49 @@
     return node.closest(EGET_GITTER) ? side : null;
   }
 
-  // Samme princip som paa Spotify-siden: hoejeste sete vaerdi pr. sti, ikke summen.
+  // Taelling - samme princip som paa Spotify-siden: DISTINKTE videoer pr. sti,
+  // ikke hvor mange kort der er tegnet lige nu. YouTubes lister er
+  // virtualiserede, saa "hoejeste sete antal kort" saturerede ved én skaerm og
+  // maalte hvor meget der var plads til, ikke hvad brugeren har set. Identiteten
+  // er kortets videolink; den overlever at kortet unmountes og tegnes igen.
   let sidsteSti = "";
-  let hoejest = { flagged: 0, total: 0 };
+  let setteVideoer = new Set();
+  let setteFlagede = new Set();
+  let ventende = { flagged: 0, total: 0 };
   let taelTimer = 0;
 
-  function taelOp(flagged, total) {
+  // Videolinket: /watch?v=..., /shorts/..., /playlist?list=... Sporingsparametre
+  // (&pp=, &t=) klippes af, ellers er samme video to identiteter.
+  function videoId(k) {
+    const a = k.querySelector('a[href^="/watch?"], a[href^="/shorts/"], a[href^="/playlist?"]');
+    if (a) return (a.getAttribute("href") || "").split("&")[0];
+    return (k.innerText || "").replace(/\s+/g, " ").trim().slice(0, 60) || null;
+  }
+
+  function taelOp(poster) {
     if (location.pathname !== sidsteSti) {
       sidsteSti = location.pathname;
-      hoejest = { flagged: 0, total: 0 };
+      setteVideoer = new Set(); setteFlagede = new Set();
     }
-    const nyF = Math.max(flagged, hoejest.flagged) - hoejest.flagged;
-    const nyT = Math.max(total, hoejest.total) - hoejest.total;
+    let nyF = 0, nyT = 0;
+    for (const { kort, flaget } of poster) {
+      const id = videoId(kort);
+      if (!id || setteVideoer.has(id)) continue;
+      setteVideoer.add(id); nyT++;
+      if (flaget) { setteFlagede.add(id); nyF++; }
+    }
     if (!nyT && !nyF) return;
-    hoejest = { flagged: Math.max(flagged, hoejest.flagged), total: Math.max(total, hoejest.total) };
+    // Laeg til det ventende i stedet for at kaste det vaek. Foerste udgave kaldte
+    // clearTimeout, som annullerede den ventende TILVAEKST og ikke bare timeren -
+    // saa det meste af det den talte gik tabt.
+    ventende.flagged += nyF; ventende.total += nyT;
     clearTimeout(taelTimer);
-    taelTimer = setTimeout(() => send({ type: "tally", site: "youtube", flagged: nyF, total: nyT }), 1500);
+    taelTimer = setTimeout(() => {
+      const v = ventende;
+      ventende = { flagged: 0, total: 0 };
+      send({ type: "tally", site: "youtube", flagged: v.flagged, total: v.total,
+             pageFlagged: setteFlagede.size, pageTotal: setteVideoer.size });
+    }, 1500);
   }
 
   function rens() {
@@ -112,6 +139,7 @@
     if (!kort.length) return;
     let medLink = 0;
     const paaSiden = sideHaandtag();
+    const talte = [];                         // kort med kanal, til taellingen
     for (const k of kort) {
       const link = k.querySelector('a[href^="/@"]');   // hentes én gang, bruges to
       const h = haandtag(k, link);
@@ -122,6 +150,7 @@
       // block vinde, ville vi graatone kanaler som kilden kun vurderer "muligt" -
       // praecis den sammenmasning af tvivl som to-niveau-modellen findes for.
       const niveau = tilladt ? "" : state.warn.has(h) ? "warn" : state.block.has(h) ? "block" : "";
+      talte.push({ kort: k, flaget: !!niveau });
       const skjul = niveau === "block" && state.hide;
       const oensket = niveau ? (skjul ? "hidden" : niveau) : "";
       const mrk = k.querySelector(".noai-yt-mark");
@@ -158,11 +187,7 @@
         k.appendChild(m);
       } else if (!niveau && mrk) { mrk.remove(); }
     }
-    taelOp(
-      [...kort].filter((k) => k.classList.contains("noai-yt-block") ||
-                              k.classList.contains("noai-yt-warn") ||
-                              k.classList.contains("noai-yt-hidden")).length,
-      [...kort].filter((k) => k.querySelector('a[href^="/@"]') || sideHaandtag()).length);
+    taelOp(talte);
     // Selvtest: findes der kort, men ingen af dem har et kanallink, er selektoren
     // knaekket - og saa filtrerer vi lydloest ingenting.
     // paaSiden daekker praecis de tre tilfaelde rigtigt:
