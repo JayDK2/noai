@@ -72,6 +72,26 @@ else {
   else ja("rules.json: " + rl.rules.length + " regler, alle velformede");
 }
 
+// 3c. Hver tilladelse skal vaere forklaret i butiks-teksten, og hver funktion der
+// gemmer noget om brugeren skal staa i privatlivspolitikken. Dokumenterne er nu
+// tre gange faldet bagud for produktet, og det er en fejltype en maskine kan fange.
+const listing = readFileSync(join(ROD, "store/listing.md"), "utf8");
+const privacy = readFileSync(join(ROD, "PRIVACY.md"), "utf8");
+const uforklarede = [...(mf.permissions || []),
+                     ...(mf.optional_host_permissions || [])]
+  .filter((p) => !listing.includes(p));
+if (uforklarede.length) nej("tilladelser uden forklaring i store/listing.md: " + uforklarede.join(", "));
+else ja("alle " + ((mf.permissions || []).length + (mf.optional_host_permissions || []).length) +
+        " tilladelser er forklaret i butiks-teksten");
+
+const skalNaevnes = { watchlist: "watchlist", tally: "flagged-content counts",
+                      allowlist: "allowlist", notifications: "notification" };
+const glemte = Object.entries(skalNaevnes)
+  .filter(([, tekst]) => !privacy.toLowerCase().includes(tekst.toLowerCase()))
+  .map(([n]) => n);
+if (glemte.length) nej("gemte data der ikke er beskrevet i PRIVACY.md: " + glemte.join(", "));
+else ja("alt gemt om brugeren er beskrevet i privatlivspolitikken");
+
 // 4. Popup ens id'er skal matche dem scriptet slaar op
 const html = readFileSync(join(ROD, "src/popup.html"), "utf8");
 const js = readFileSync(join(ROD, "src/popup.js"), "utf8");

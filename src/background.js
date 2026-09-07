@@ -313,6 +313,21 @@ async function opdatér() {
 
 const REGEL_MAX = 40;
 
+// LAAST I DEN ANMELDTE BUILD. Den hentede fil maa levere selektorer til disse
+// vaerter og ingen andre.
+//
+// Foerste udgave udledte vaerts-listen af den hentede fil og gav den til
+// registerContentScripts. Det er ikke konfiguration: konfiguration vaelger mellem
+// adfaerd den anmeldte kode allerede indeholder, mens dét tilfoejede OPRINDELSER
+// den anmeldte build aldrig kendte. AdGuard blev afvist fem gange for praecis den
+// mekanisme og fjernede til sidst funktionen for at blive godkendt.
+//
+// Med listen laast beholder vi det vi faktisk ville have - at kunne reparere en
+// knaekket selektor paa seks timer i stedet for uger - og mister kun evnen til at
+// tilfoeje platforme uden anmeldelse, hvilket er netop dét der faar extensions
+// fjernet. Er listen tom, henter og registrerer motoren intet overhovedet.
+const REGEL_VAERTER = [];
+
 async function sikrRegler() {
   const { rulesData } = await get("rulesData");
   if (rulesData && Array.isArray(rulesData.rules)) return rulesData;
@@ -332,7 +347,9 @@ function validérRegler(tekst) {
   if (d.schema !== 1) throw new Error("ukendt schema: " + d.schema);
   const rene = d.rules.filter((r) =>
     r && typeof r.id === "string" && Array.isArray(r.hosts) && r.hosts.length &&
-    r.hosts.every((h) => typeof h === "string" && /^[a-z0-9.\-]+$/.test(h)) &&
+    // Vaerten SKAL staa i den laaste liste. En regel der naevner noget andet
+    // kasseres praecis som en misdannet regel - den fortolkes ikke.
+    r.hosts.every((h) => typeof h === "string" && REGEL_VAERTER.includes(h)) &&
     typeof r.container === "string" && r.container.length < 200 &&
     typeof r.signal === "string" && r.signal.length < 200 &&
     (r.tier === "block" || r.tier === "warn") &&
@@ -344,6 +361,7 @@ function validérRegler(tekst) {
 let henterRegler = null;
 
 async function opdatérRegler() {
+  if (!REGEL_VAERTER.length) return { ok: true, count: 0 };   // intet at hente
   if (henterRegler) return henterRegler;
   henterRegler = (async () => {
     const afbryd = new AbortController();
@@ -370,11 +388,11 @@ async function opdatérRegler() {
 const REGEL_SCRIPT_ID = "noai-rules";
 
 async function opdatérRegelScript() {
+  if (!REGEL_VAERTER.length) return false;    // motoren er inaktiv i denne udgave
   const i = await indstillinger();
-  const harLov = await chrome.permissions.contains({ origins: ["<all_urls>"] });
   const d = await sikrRegler();
-  const hosts = [...new Set(d.rules.flatMap((r) => r.hosts))];
-  const skalKoere = !!i.rules && harLov && hosts.length > 0;
+  const hosts = REGEL_VAERTER;                 // ALDRIG fra den hentede fil
+  const skalKoere = !!i.rules && d.rules.length > 0;
   let registreret = false;
   try {
     registreret = (await chrome.scripting.getRegisteredContentScripts({ ids: [REGEL_SCRIPT_ID] })).length > 0;
@@ -384,7 +402,7 @@ async function opdatérRegelScript() {
     if (skalKoere) {
       await chrome.scripting.registerContentScripts([{
         id: REGEL_SCRIPT_ID,
-        matches: hosts.map((h) => "*://" + h + "/*"),
+        matches: hosts.map((h) => "https://" + h + "/*"),   // aldrig http
         js: ["src/content-rules.js"],
         css: ["src/content-rules.css"],
         runAt: "document_idle",
@@ -506,6 +524,7 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
                       origin: liste.origin, source: liste.source },
           lastError: lastError || null,
           sidsteSide: (await get("sidsteSide")).sidsteSide || null,
+          rulesAvailable: REGEL_VAERTER.length > 0,
           ytError: ytError || null,
           ytMeta: { generated_at: ytListe.generated_at, source: ytListe.source,
                     count: ytListe.block.length + ytListe.warn.length },

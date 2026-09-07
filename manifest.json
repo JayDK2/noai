@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "NoAI — AI Content Filter",
-  "version": "0.8.0",
-  "description": "Dims tracks and videos reported as AI-generated on the Spotify web player and YouTube, using community-maintained lists.",
+  "version": "0.8.1",
+  "description": "Dims tracks and videos reported as AI-generated on Spotify Web and YouTube, and marks images whose own file declares AI.",
   "permissions": [
     "storage",
     "alarms",

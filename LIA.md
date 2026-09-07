@@ -61,6 +61,12 @@ this section is corrected to describe the one we did.)*
   six hours without the upstream maintainer's cooperation.
 - No profiling, no automated decision with legal effect, no combination with
   other data.
+- **Anyone can check their own status without contacting us and without trusting
+  us.** The extension answers "is this artist on a list, and which tier" from the
+  copy already on the user's machine. A safeguard that costs the data subject
+  nothing and requires no cooperation from the controller is worth more than one
+  that depends on us answering an email, and it sits alongside — not instead of —
+  the right of access.
 
 **Conclusion:** not overridden — but only because of the safeguards. Remove
 dim-by-default, or the allowlist, or unconditional removal, and it tips. They
@@ -139,6 +145,22 @@ being met. **Reassess if** user-submitted reporting is ever built, since that
 would make us the originator of the accusations rather than a redistributor.
 
 ---
+
+## D2. Site rules
+
+The extension contains a mechanism for marking content that a platform has itself
+labelled AI, driven by selectors delivered as data. Two constraints keep it inside
+this assessment rather than opening a new one:
+
+- **The hosts are fixed in the reviewed build.** A rule may only supply selectors
+  for a site already named in the shipped code; a rule naming any other host is
+  discarded. The delivered file cannot extend the extension to a new platform.
+- **It marks a platform's own declaration.** No person is named and no list of
+  individuals is involved, so there is no new category of data subject.
+
+If either constraint is ever relaxed — particularly if hosts become data — this
+assessment must be re-run, because the extension would then be able to act on
+sites and content that were never assessed.
 
 ## E. Review triggers
 

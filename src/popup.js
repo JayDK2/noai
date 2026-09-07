@@ -49,6 +49,9 @@ function advarsel() {
 function tegn() {
   $("enabled").checked = state.enabled;
   $("c2pa").checked = !!state.c2pa;
+  // Kontakten vises kun naar motoren faktisk har laaste vaerter at arbejde paa.
+  const regelRaekke = $("rules").closest(".sw-row");
+  if (regelRaekke) regelRaekke.hidden = !state.rulesAvailable;
   $("rules").checked = !!state.rules;
   $("skip").checked = state.skip;
   $("hide").checked = state.hide;

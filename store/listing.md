@@ -5,7 +5,7 @@
 **Short description** (must match actual default behaviour — the default dims,
 it does not remove):
 
-> Dims tracks and videos reported as AI-generated on Spotify Web and YouTube, and marks images that declare AI in their own file.
+> Dims tracks and videos reported as AI-generated on Spotify Web and YouTube, and marks images whose own file declares they were made with AI.
 
 **Permission justifications**
 
@@ -53,7 +53,7 @@ as any web request does.
 localised descriptions (Blockify was removed for keyword density); use Spotify
 green (#1DB954), circles or wave motifs in the icon.
 
-## Added in 0.4.0
+## Permissions added after 0.3
 
 - `scripting` — Used only to register the image-scanning content script after the
   user grants the optional site permission, and to unregister it when they turn
@@ -94,3 +94,27 @@ cosmetic filter working. It also lets a broken selector be fixed in hours rather
 than weeks, which is a user-protection measure as much as a convenience.
 
 The feature is off by default and requires the user to grant site access.
+
+## Permissions — complete list as of 0.8.1
+
+- `storage` — Settings, allowlist, watchlist and the filter lists, on the user's own device. Nothing is transmitted.
+- `alarms` — Schedules the six-hourly filter-list update. A service worker cannot keep a timer alive without it.
+- `scripting` — Registers the image-scanning content script after the user grants the optional site permission, and unregisters it when they turn the feature off. It injects one bundled script; nothing is downloaded or evaluated.
+- `contextMenus` — Adds two right-click entries on a track or channel link: allowlist it, or report a mistake. No page content is read and nothing is transmitted.
+- `notifications` — Shows a local notification when an artist or channel on the user's watchlist is added to or removed from a filter list. Generated on the device from the list already downloaded; no server is involved and nothing is sent.
+- `host_permissions` (one repository path on raw.githubusercontent.com) — Downloads the filter lists. Plain data, parsed with JSON.parse, never evaluated.
+- `optional_host_permissions` (`<all_urls>`) — **Not requested at install.** Granted by the user from the popup when they enable Content Credentials, and removed when they turn it off. Used to read the first 256 KB of images to see whether the file itself declares AI generation.
+
+**Single purpose, one formulation covering every surface:** one filter for content
+reported or declared as AI-generated, applied where the user browses. The lists,
+the image check and the counters all serve that one job; the watchlist and the
+right-click entries are how a user corrects and follows it.
+
+## Site rules — not enabled in this release
+
+The build contains a mechanism for marking content a platform has labelled AI
+itself, driven by selectors delivered as data. **It is inert in this release:** the
+list of sites it may run on is fixed in this build and is empty, so it fetches
+nothing, registers no content script, and shows no control. A delivered rule can
+never introduce a site — a rule naming a host that is not in the shipped list is
+discarded exactly like a malformed one. Selectors change; the scope does not.

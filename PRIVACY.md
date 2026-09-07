@@ -17,6 +17,13 @@ NoAI stores, only on your own device, in the browser's extension storage:
 
 - your settings (filter on/off, auto-skip, dim or hide, Content Credentials)
 - your allowlist — artists and channels you have told it never to filter
+- **your watchlist** — artists or channels you have asked to be told about. This is
+  a list of who you care about, which is information about you, so we say so here
+  even though it never leaves your machine.
+- **counts of how much of what you saw was flagged** — two integers per site per
+  day, kept for 30 days. No addresses, no titles, no page identities beyond the
+  site name. It exists so you can see the scale of the thing you are filtering;
+  the only reader is you.
 - a count of tracks skipped
 - a copy of the filter lists
 
@@ -76,10 +83,32 @@ Switching the feature off removes the site permission again.
 
 | What | Kept for |
 |---|---|
-| Your settings, allowlist, skip count, filter lists | Until you uninstall or clear them |
+| Your settings, allowlist, watchlist, skip count, filter lists | Until you uninstall or clear them |
+| Flagged-content counts | 30 days, then dropped automatically |
 | Content Credentials results | The current browser session, in memory |
 | Filter-list entries | As long as they are upstream and not on our retraction lists |
 | Removed entries in the mirror's git history | Permanently — git history cannot be rewritten without breaking every clone. A removal stops the entry reaching users within six hours; it does not erase it from past commits. We say so rather than let you discover it. |
+
+### Notifications and right-click menus
+
+If you put an artist or channel on your watchlist, NoAI shows you a notification
+when the filter list adds or removes them. The notification is generated on your
+machine from the list you already downloaded. No server is involved and nothing
+is sent.
+
+The right-click menu adds two entries on an artist or channel link: allowlist it,
+or report it as a mistake. Neither reads the page; the second opens a pre-filled
+issue form you can edit or close.
+
+### Checking your own status
+
+The extension can tell you whether a given artist or channel is on a list, which
+tier, and from which source — entirely from the copy already on your machine.
+
+This is a convenience, **not** our answer to a right of access. Art. 15 obliges us
+to tell you the purposes, recipients, retention, source and your rights, and that
+is what writing to the address below gets you. The lookup answers one narrow
+question quickly, and you should not have to install anything to exercise a right.
 
 NoAI does not detect, block, mute, or skip advertisements.
 NoAI is not affiliated with, endorsed by, or connected to Spotify or YouTube.
