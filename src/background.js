@@ -14,7 +14,21 @@ const MIRROR_URL = "https://raw.githubusercontent.com/JayDK2/noai/main/blocklist
 const MIRROR_YT  = "https://raw.githubusercontent.com/JayDK2/noai/main/youtube.json";
 const MIRROR_REGLER = "https://raw.githubusercontent.com/JayDK2/noai/main/rules.json";
 const ALARM = "noai-refresh";
+const ALARM_IGEN = "noai-retry";
+const RETRY_MIN = 20;   // efter en fejlet hentning, ikke om seks timer
 const REFRESH_MIN = 360;             // 6 timer
+
+// Et sekunds netvaerksudfald maa ikke koste seks timers foraeldelse. Fejler en
+// hentning, proever vi igen om 20 minutter i stedet for at vente paa den naeste
+// planlagte runde - og advarslen i popup en forsvinder af sig selv naar det
+// lykkes, i stedet for at staa og goere brugeren urolig over noget der var vaek
+// efter et minut.
+async function planlaegGenforsoeg(fejlede) {
+  try {
+    if (fejlede) await chrome.alarms.create(ALARM_IGEN, { delayInMinutes: RETRY_MIN });
+    else await chrome.alarms.clear(ALARM_IGEN);
+  } catch (e) { /* alarmer maa aldrig vaelte en opdatering */ }
+}
 const HENT_TIMEOUT = 30000;
 const MAX_BYTES = 4 * 1024 * 1024;   // loft: en kapret kilde maa ikke kunne sprage hukommelsen
 const MIN_IDS = 1000;                // krympe-vaern, nedre gulv
@@ -294,11 +308,13 @@ async function opdatér() {
       // evigt. Det braekker retten til berigtigelse.
       await meldAendring("spotify", nuvaerende.ids, frisk.ids);
       await set({ blocklist: frisk, lastError: null });
+      await planlaegGenforsoeg(false);
       await noedKontakt(frisk);
       return { ok: true, count: frisk.ids.length };
     } catch (e) {
       // beholder sidste gode liste - en fejlet hentning er ikke en tom liste
       await set({ lastError: { when: new Date().toISOString(), msg: String(e.message || e) } });
+      await planlaegGenforsoeg(true);
       return { ok: false, error: String(e.message || e) };
     } finally {
       clearTimeout(ur);
@@ -868,5 +884,5 @@ chrome.runtime.onStartup.addListener(async () => {
 });
 
 chrome.alarms.onAlarm.addListener((a) => {
-  if (a.name === ALARM) { opdatér(); opdatérYt(); opdatérRegler(); }
+  if (a.name === ALARM || a.name === ALARM_IGEN) { opdatér(); opdatérYt(); opdatérRegler(); }
 });
