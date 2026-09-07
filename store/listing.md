@@ -75,3 +75,22 @@ repository. A markdown blob in a git repo is technically public but not findable
 an artist searching for their own name will never land on it, and Art. 14(5)(b)
 asks for information the data subject can actually reach. The repository copy
 remains the source the page is generated from.
+
+## Site rules — what a reviewer needs to know
+
+The extension fetches `rules.json` from the same repository path as its filter lists.
+A rule contains only: a list of hostnames, a CSS container selector, a CSS signal
+selector, a tier, and a label string.
+
+**This is data, not remotely hosted code.** The extension never evaluates fetched
+content. It calls `JSON.parse`, discards anything that does not match the exact
+expected shape, and the only operations a rule can cause are `classList.toggle` and
+setting `textContent` on an element the extension creates. There is no expression
+language, no callbacks, no dynamic import, no `eval`, no `new Function`.
+
+The purpose is the same as an ad blocker's filter lists: platform selectors change
+frequently, and a two-week review cycle is the wrong mechanism for keeping a
+cosmetic filter working. It also lets a broken selector be fixed in hours rather
+than weeks, which is a user-protection measure as much as a convenience.
+
+The feature is off by default and requires the user to grant site access.

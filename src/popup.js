@@ -49,6 +49,7 @@ function advarsel() {
 function tegn() {
   $("enabled").checked = state.enabled;
   $("c2pa").checked = !!state.c2pa;
+  $("rules").checked = !!state.rules;
   $("skip").checked = state.skip;
   $("hide").checked = state.hide;
   $("s-skipped").textContent = (state.stats && state.stats.skipped) || 0;
@@ -105,18 +106,28 @@ async function indlaes() { state = await send({ type: "state" }); tegn(); }
 // Billed-scanning kraever adgang til alle websites, og den beder vi foerst om her
 // - ikke ved installation. Siger brugeren nej i browserens dialog, ruller kontakten
 // tilbage i stedet for at staa taendt uden at kunne noget.
-$("c2pa").addEventListener("change", async (e) => {
+// Begge funktioner deler den samme valgfrie adgang til alle websites. Den bedes
+// der foerst om her - aldrig ved installation.
+async function bedOmAdgang(e, noegle) {
   if (e.target.checked) {
     let fik = false;
     try { fik = await chrome.permissions.request({ origins: ["<all_urls>"] }); }
     catch (err) { fik = false; }
     if (!fik) { e.target.checked = false; return; }
-  } else {
-    try { await chrome.permissions.remove({ origins: ["<all_urls>"] }); } catch (err) {}
   }
-  await send({ type: "setOption", key: "c2pa", value: e.target.checked });
+  await send({ type: "setOption", key: noegle, value: e.target.checked });
+  // Adgangen traekkes kun tilbage naar BEGGE er slukket - ellers ville den ene
+  // kontakt slaa den anden ihjel.
+  if (!e.target.checked) {
+    const s = await send({ type: "state" });
+    if (s && !s.c2pa && !s.rules) { try { await chrome.permissions.remove({ origins: ["<all_urls>"] }); } catch (err) {} }
+  }
   indlaes();
-});
+}
+
+$("rules").addEventListener("change", (e) => bedOmAdgang(e, "rules"));
+
+$("c2pa").addEventListener("change", (e) => bedOmAdgang(e, "c2pa"));
 
 for (const k of ["enabled", "skip", "hide"]) {
   $(k).addEventListener("change", async (e) => {

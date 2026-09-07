@@ -12,6 +12,7 @@ importScripts("/src/c2pa.js");
 
 const MIRROR_URL = "https://raw.githubusercontent.com/JayDK2/noai/main/blocklist.json";
 const MIRROR_YT  = "https://raw.githubusercontent.com/JayDK2/noai/main/youtube.json";
+const MIRROR_REGLER = "https://raw.githubusercontent.com/JayDK2/noai/main/rules.json";
 const ALARM = "noai-refresh";
 const REFRESH_MIN = 360;             // 6 timer
 const HENT_TIMEOUT = 30000;
@@ -30,6 +31,7 @@ const standard = () => ({
   allowlist: [],        // kunstner-id er brugeren aldrig vil filtrere
   allowNames: {},       // id -> navn, kun saa listen er laeselig i popup en
   c2pa: false,          // billed-scanning kraever <all_urls> - brugeren taender selv
+  rules: false,         // site-regler fra mirroren - samme tilladelse, eget valg
   stats: { skipped: 0 },
   watchlist: [],        // [{kind:"spotify"|"youtube", id, label}] - hold oeje med en post
   tally: {},            // dag -> {flagged, total} pr. site. Kun lokalt, kun til brugeren selv.
@@ -300,6 +302,98 @@ async function opdatér() {
   return henterNu;
 }
 
+// --- site-regler ----------------------------------------------------------
+// Selektorer som DATA, hentet fra vores egen mirror. En ny platform bliver en
+// JSON-linje der er live paa seks timer; en knaekket selektor kan rettes lige saa
+// hurtigt, i stedet for at vente paa en butiksopdatering.
+//
+// Intet i en regel udfoeres nogensinde som kode. Handlingerne er et lukket
+// ordforraad: saet en klasse, saet en tekst. Alt andet ville vaere fjernhostet
+// kode og er baade forbudt og en daarlig idé.
+
+const REGEL_MAX = 40;
+
+async function sikrRegler() {
+  const { rulesData } = await get("rulesData");
+  if (rulesData && Array.isArray(rulesData.rules)) return rulesData;
+  let froe = { generated_at: null, schema: 1, rules: [] };
+  try {
+    const r = await fetch(chrome.runtime.getURL("rules.json"));
+    froe = await r.json();
+  } catch (e) {}
+  froe.origin = "bundled";
+  await set({ rulesData: froe });
+  return froe;
+}
+
+function validérRegler(tekst) {
+  const d = JSON.parse(tekst);
+  if (!d || !Array.isArray(d.rules)) throw new Error("mangler rules-array");
+  if (d.schema !== 1) throw new Error("ukendt schema: " + d.schema);
+  const rene = d.rules.filter((r) =>
+    r && typeof r.id === "string" && Array.isArray(r.hosts) && r.hosts.length &&
+    r.hosts.every((h) => typeof h === "string" && /^[a-z0-9.\-]+$/.test(h)) &&
+    typeof r.container === "string" && r.container.length < 200 &&
+    typeof r.signal === "string" && r.signal.length < 200 &&
+    (r.tier === "block" || r.tier === "warn") &&
+    typeof r.label === "string" && r.label.length < 80);
+  if (rene.length !== d.rules.length) throw new Error("regelfilen indeholdt ugyldige poster");
+  return { ...d, rules: rene.slice(0, REGEL_MAX) };
+}
+
+let henterRegler = null;
+
+async function opdatérRegler() {
+  if (henterRegler) return henterRegler;
+  henterRegler = (async () => {
+    const afbryd = new AbortController();
+    const ur = setTimeout(() => afbryd.abort(), HENT_TIMEOUT);
+    try {
+      const r = await fetch(MIRROR_REGLER, { cache: "no-cache", signal: afbryd.signal });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      const tekst = await r.text();
+      if (tekst.length > 512 * 1024) throw new Error("regelfil for stor");
+      const frisk = validérRegler(tekst);
+      frisk.origin = "mirror";
+      frisk.fetched_at = new Date().toISOString();
+      await set({ rulesData: frisk, rulesError: null });
+      await opdatérRegelScript();
+      return { ok: true, count: frisk.rules.length };
+    } catch (e) {
+      await set({ rulesError: { when: new Date().toISOString(), msg: String(e.message || e) } });
+      return { ok: false, error: String(e.message || e) };
+    } finally { clearTimeout(ur); henterRegler = null; }
+  })();
+  return henterRegler;
+}
+
+const REGEL_SCRIPT_ID = "noai-rules";
+
+async function opdatérRegelScript() {
+  const i = await indstillinger();
+  const harLov = await chrome.permissions.contains({ origins: ["<all_urls>"] });
+  const d = await sikrRegler();
+  const hosts = [...new Set(d.rules.flatMap((r) => r.hosts))];
+  const skalKoere = !!i.rules && harLov && hosts.length > 0;
+  let registreret = false;
+  try {
+    registreret = (await chrome.scripting.getRegisteredContentScripts({ ids: [REGEL_SCRIPT_ID] })).length > 0;
+  } catch (e) {}
+  try {
+    if (registreret) await chrome.scripting.unregisterContentScripts({ ids: [REGEL_SCRIPT_ID] });
+    if (skalKoere) {
+      await chrome.scripting.registerContentScripts([{
+        id: REGEL_SCRIPT_ID,
+        matches: hosts.map((h) => "*://" + h + "/*"),
+        js: ["src/content-rules.js"],
+        css: ["src/content-rules.css"],
+        runAt: "document_idle",
+      }]);
+    }
+  } catch (e) {}
+  return skalKoere;
+}
+
 // --- opslag ---------------------------------------------------------------
 // "Staar jeg paa en liste?" Den vigtigste funktion for den der ER paa listen:
 // intet sted i verden kan man i dag slaa det op. Alt sker lokalt - vi har begge
@@ -421,6 +515,15 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
         break;
       }
       case "lookup": svar(await slaaOp(msg.query)); break;
+      case "rules": {
+        const i = await indstillinger();
+        const ks = (await get("killSwitch")).killSwitch;
+        if (!i.enabled || !i.rules || (ks && ks.active)) { svar({ rules: [] }); break; }
+        const d = await sikrRegler();
+        const v = String(msg.host || "").toLowerCase();
+        svar({ rules: d.rules.filter((r) => r.hosts.some((h) => v === h || v.endsWith("." + h))) });
+        break;
+      }
       case "tally": {
         // Ren lokal statistik. Ingen URL er, ingen sidetitler - kun to tal pr. dag
         // pr. site. Den eneste modtager er brugeren selv.
@@ -493,6 +596,7 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
         const tilladt = ["enabled", "skip", "hide", "allowlist", "allowNames", "c2pa"];
         if (tilladt.includes(msg.key)) await set({ [msg.key]: msg.value });
         if (msg.key === "c2pa") await opdatérC2paScript();
+        if (msg.key === "rules") await opdatérRegelScript();
         svar({ ok: true });
         break;
       }
@@ -575,8 +679,9 @@ const planlaeg = () => chrome.alarms.create(ALARM, { periodInMinutes: REFRESH_MI
 chrome.permissions.onRemoved.addListener(async () => {
   // Traekker brugeren adgangen tilbage i browserens egne indstillinger, skal
   // funktionen slukke af sig selv - ikke staa og fejle i det stille.
-  await set({ c2pa: false });
+  await set({ c2pa: false, rules: false });
   await opdatérC2paScript();
+  await opdatérRegelScript();
 });
 
 chrome.runtime.onInstalled.addListener(async () => {
@@ -604,4 +709,6 @@ chrome.runtime.onStartup.addListener(async () => {
   if (alder > REFRESH_MIN * 60 * 1000) { opdatér(); opdatérYt(); }
 });
 
-chrome.alarms.onAlarm.addListener((a) => { if (a.name === ALARM) { opdatér(); opdatérYt(); } });
+chrome.alarms.onAlarm.addListener((a) => {
+  if (a.name === ALARM) { opdatér(); opdatérYt(); opdatérRegler(); }
+});

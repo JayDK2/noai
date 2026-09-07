@@ -58,6 +58,20 @@ if (overlap.length) nej("youtube.json: " + overlap.length + " kanal(er) paa BEGG
 else ja("youtube.json: " + b.size + " blok + " + w.size + " advarsel, intet overlap");
 if (yt.count !== b.size + w.size) nej("youtube.json: count-feltet er " + yt.count + ", skulle vaere " + (b.size + w.size));
 
+// 3b. Regelfilen: selektorer er data, men de skal stadig vaere velformede
+const rl = JSON.parse(readFileSync(join(ROD, "rules.json"), "utf8"));
+if (rl.schema !== 1) nej("rules.json: ukendt schema " + rl.schema);
+else if (!Array.isArray(rl.rules)) nej("rules.json: mangler rules-array");
+else {
+  const daarlige = rl.rules.filter((r) => !(r && typeof r.id === "string" &&
+    Array.isArray(r.hosts) && r.hosts.length &&
+    r.hosts.every((h) => /^[a-z0-9.\-]+$/.test(h)) &&
+    typeof r.container === "string" && typeof r.signal === "string" &&
+    (r.tier === "block" || r.tier === "warn") && typeof r.label === "string"));
+  if (daarlige.length) nej("rules.json: " + daarlige.length + " ugyldige regler");
+  else ja("rules.json: " + rl.rules.length + " regler, alle velformede");
+}
+
 // 4. Popup ens id'er skal matche dem scriptet slaar op
 const html = readFileSync(join(ROD, "src/popup.html"), "utf8");
 const js = readFileSync(join(ROD, "src/popup.js"), "utf8");

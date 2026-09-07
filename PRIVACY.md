@@ -24,7 +24,7 @@ None of it is transmitted, and it is deleted when you uninstall.
 
 ### Every network request NoAI makes
 
-There are three, and no others.
+There are four, and no others.
 
 **1. The Spotify filter list**, every six hours, from a static file on GitHub.
 **2. The YouTube filter list**, every six hours, from a static file on GitHub.
@@ -36,7 +36,10 @@ web request, GitHub's servers see your IP address. We receive nothing and store
 nothing. GitHub hosts and serves those files and is, for that publication, a
 processor acting for us.
 
-**3. Content Credentials — only if you switch it on.** See below.
+**3. Site rules**, every six hours, from a static file on GitHub — only if you have
+switched site rules on. Same one-way download, same absence of anything about you.
+
+**4. Content Credentials — only if you switch it on.** See below.
 
 ### Content Credentials (optional, off by default)
 

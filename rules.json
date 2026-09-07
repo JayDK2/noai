@@ -1,0 +1,6 @@
+{
+  "generated_at": null,
+  "schema": 1,
+  "note": "Site rules are data, never code. Actions are limited to setting a class and a text label. Rules arrive from the mirror and go live within six hours.",
+  "rules": []
+}

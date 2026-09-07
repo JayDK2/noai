@@ -50,6 +50,28 @@ will. It reads what the file says about itself, and says so in those words —
 C2PA library and a certificate chain, and a forged claim that something **is**
 AI is not an attack anyone has reason to mount.
 
+## Site rules
+
+Off by default; shares the same optional site permission as Content Credentials.
+
+A growing number of platforms label AI content themselves. Rather than shipping a
+code change and waiting on store review for each one, NoAI reads **site rules** from
+the same file it already fetches every six hours. A new platform becomes one JSON
+entry that goes live in six hours — and a broken selector can be fixed just as fast,
+instead of waiting weeks for an update to be approved.
+
+**Rules are data, never code.** This is the line the whole design depends on:
+
+- A rule is four strings: which hosts, which container, which signal element, and a
+  label to show. Nothing else is read.
+- The only two actions are: add a class, and add a text label. There is no
+  expression language, no callback, no script.
+- Nothing fetched is ever evaluated. `JSON.parse` and nothing else.
+- Rules that do not match the exact expected shape are discarded, not interpreted.
+
+This is the same posture as an ad blocker's filter lists, and for the same reason:
+selectors change often, and a release cycle is the wrong tool for keeping up.
+
 ## Known limits
 
 Honest ones, because they are the reason for the defaults:
