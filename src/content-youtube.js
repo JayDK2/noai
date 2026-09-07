@@ -77,6 +77,24 @@
     return node.closest(EGET_GITTER) ? side : null;
   }
 
+  // Samme princip som paa Spotify-siden: hoejeste sete vaerdi pr. sti, ikke summen.
+  let sidsteSti = "";
+  let hoejest = { flagged: 0, total: 0 };
+  let taelTimer = 0;
+
+  function taelOp(flagged, total) {
+    if (location.pathname !== sidsteSti) {
+      sidsteSti = location.pathname;
+      hoejest = { flagged: 0, total: 0 };
+    }
+    const nyF = Math.max(flagged, hoejest.flagged) - hoejest.flagged;
+    const nyT = Math.max(total, hoejest.total) - hoejest.total;
+    if (!nyT && !nyF) return;
+    hoejest = { flagged: Math.max(flagged, hoejest.flagged), total: Math.max(total, hoejest.total) };
+    clearTimeout(taelTimer);
+    taelTimer = setTimeout(() => send({ type: "tally", site: "youtube", flagged: nyF, total: nyT }), 1500);
+  }
+
   function rens() {
     if (!state) return;
     if (!state.enabled) {
@@ -140,11 +158,20 @@
         k.appendChild(m);
       } else if (!niveau && mrk) { mrk.remove(); }
     }
+    taelOp(
+      [...kort].filter((k) => k.classList.contains("noai-yt-block") ||
+                              k.classList.contains("noai-yt-warn") ||
+                              k.classList.contains("noai-yt-hidden")).length,
+      [...kort].filter((k) => k.querySelector('a[href^="/@"]') || sideHaandtag()).length);
     // Selvtest: findes der kort, men ingen af dem har et kanallink, er selektoren
     // knaekket - og saa filtrerer vi lydloest ingenting.
-    // Paa en kanalside har kortene med rette ingen links, MEN kun i kanalens eget
-    // gitter. Er der mange kort helt uden links noget sted, er selektoren knaekket.
-    const brudt = kort.length > 8 && medLink === 0;
+    // paaSiden daekker praecis de tre tilfaelde rigtigt:
+    //  - almindelig side med kort men ingen links -> paaSiden er null -> alarm (rigtigt)
+    //  - kanalside hvor haandtaget parser  -> filtreringen virker      -> tavshed (rigtigt)
+    //  - kanalside hvor haandtaget IKKE parser -> paaSiden er null     -> alarm (rigtigt)
+    // Uden den fyrede alarmen paa hver eneste kanalside. En falsk alarm er vaerre
+    // end en blind vinkel: den laerer brugeren at ignorere vagten.
+    const brudt = kort.length > 8 && medLink === 0 && !paaSiden;
     if (brudt !== svigtMeldt) {
       svigtMeldt = brudt;
       send({ type: "selectors", site: "youtube", broken: brudt ? ["youtube-channel-link"] : [] });

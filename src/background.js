@@ -29,6 +29,8 @@ const standard = () => ({
   allowNames: {},       // id -> navn, kun saa listen er laeselig i popup en
   c2pa: false,          // billed-scanning kraever <all_urls> - brugeren taender selv
   stats: { skipped: 0 },
+  watchlist: [],        // [{kind:"spotify"|"youtube", id, label}] - hold oeje med en post
+  tally: {},            // dag -> {flagged, total} pr. site. Kun lokalt, kun til brugeren selv.
 });
 
 // --- Content Credentials (C2PA) -------------------------------------------
@@ -218,6 +220,8 @@ async function opdatérYt() {
       const frisk = validérYt(tekst, nuvaerende.block.length);
       frisk.origin = "mirror";
       frisk.fetched_at = new Date().toISOString();
+      await meldAendring("youtube", [...nuvaerende.block, ...nuvaerende.warn],
+                                    [...frisk.block, ...frisk.warn]);
       await set({ ytlist: frisk, ytError: null });
       await noedKontakt(frisk);
       return { ok: true, count: frisk.block.length + frisk.warn.length };
@@ -250,6 +254,7 @@ async function opdatér() {
       // ERSTATTER. Flettes ALDRIG ind i den gamle: goer man det, bliver den indbagte
       // liste et gulv, og en kunstner der er fjernet hos kilden forbliver flaget for
       // evigt. Det braekker retten til berigtigelse.
+      await meldAendring("spotify", nuvaerende.ids, frisk.ids);
       await set({ blocklist: frisk, lastError: null });
       await noedKontakt(frisk);
       return { ok: true, count: frisk.ids.length };
@@ -263,6 +268,71 @@ async function opdatér() {
     }
   })();
   return henterNu;
+}
+
+// --- opslag ---------------------------------------------------------------
+// "Staar jeg paa en liste?" Den vigtigste funktion for den der ER paa listen:
+// intet sted i verden kan man i dag slaa det op. Alt sker lokalt - vi har begge
+// lister i storage i forvejen, saa det er et Set-opslag, ikke et netvaerkskald.
+
+const ID_SPOTIFY = /^[A-Za-z0-9]{22}$/;
+
+function tolkSoegning(raa) {
+  const t = String(raa || "").trim();
+  if (!t) return null;
+  let m = /open\.spotify\.com\/artist\/([A-Za-z0-9]{22})/.exec(t);
+  if (m) return { kind: "spotify", id: m[1] };
+  if (ID_SPOTIFY.test(t)) return { kind: "spotify", id: t };
+  m = /youtube\.com\/(@[^/?#\s]+)/.exec(t);
+  if (m) { try { return { kind: "youtube", id: decodeURIComponent(m[1]).toLowerCase() }; }
+           catch (e) { return { kind: "youtube", id: m[1].toLowerCase() }; } }
+  if (t.startsWith("@")) {
+    try { return { kind: "youtube", id: decodeURIComponent(t).toLowerCase() }; }
+    catch (e) { return { kind: "youtube", id: t.toLowerCase() }; }
+  }
+  return null;
+}
+
+async function slaaOp(raa) {
+  const q = tolkSoegning(raa);
+  if (!q) return { ok: false, reason: "unparsed" };
+  if (q.kind === "spotify") {
+    const l = await sikrListe();
+    return { ok: true, kind: "spotify", id: q.id,
+             tier: l.ids.includes(q.id) ? "block" : "none",
+             source: l.source, generated_at: l.generated_at };
+  }
+  const l = await sikrYtListe();
+  return { ok: true, kind: "youtube", id: q.id,
+           tier: l.block.includes(q.id) ? "block" : l.warn.includes(q.id) ? "warn" : "none",
+           source: l.source, generated_at: l.generated_at };
+}
+
+// --- overvaagning ---------------------------------------------------------
+// Ved hver listeopdatering sammenlignes den nye liste med den gamle. Bliver en
+// post man holder oeje med tilfoejet eller fjernet, faar man besked. Det er hele
+// pointen: man kan ikke selv opdage at man er havnet paa en fremmed liste.
+
+async function meldAendring(kind, foer, efter) {
+  const i = await indstillinger();
+  const vagt = (i.watchlist || []).filter((w) => w.kind === kind);
+  if (!vagt.length) return;
+  const gammel = new Set(foer), ny = new Set(efter);
+  for (const w of vagt) {
+    const var_ = gammel.has(w.id), er = ny.has(w.id);
+    if (var_ === er) continue;
+    const navn = w.label || w.id;
+    try {
+      await chrome.notifications.create("noai-" + kind + "-" + w.id + "-" + Date.now(), {
+        type: "basic",
+        iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+        title: er ? "Added to a filter list" : "Removed from a filter list",
+        message: navn + (er
+          ? " has been added to the " + (kind === "youtube" ? "YouTube" : "Spotify") + " list."
+          : " is no longer on the " + (kind === "youtube" ? "YouTube" : "Spotify") + " list."),
+      });
+    } catch (e) { /* notifikationer kan vaere slaaet fra - det maa ikke vaelte opdateringen */ }
+  }
 }
 
 // --- maa denne fane skippe? -----------------------------------------------
@@ -311,12 +381,31 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
           listMeta: { generated_at: liste.generated_at, count: liste.ids.length,
                       origin: liste.origin, source: liste.source },
           lastError: lastError || null,
+          sidsteSide: (await get("sidsteSide")).sidsteSide || null,
           ytError: ytError || null,
           ytMeta: { generated_at: ytListe.generated_at, source: ytListe.source,
                     count: ytListe.block.length + ytListe.warn.length },
           skipStopped: skipStopped || null,
           selectorTrouble: selectorTrouble || null,
         });
+        break;
+      }
+      case "lookup": svar(await slaaOp(msg.query)); break;
+      case "tally": {
+        // Ren lokal statistik. Ingen URL er, ingen sidetitler - kun to tal pr. dag
+        // pr. site. Den eneste modtager er brugeren selv.
+        const i = await indstillinger();
+        const dag = new Date().toISOString().slice(0, 10);
+        const t = { ...(i.tally || {}) };
+        const d = { ...(t[dag] || {}) };
+        const site = msg.site === "youtube" ? "youtube" : "spotify";
+        const s0 = d[site] || { flagged: 0, total: 0 };
+        d[site] = { flagged: s0.flagged + (msg.flagged | 0), total: s0.total + (msg.total | 0) };
+        t[dag] = d;
+        // hold 30 dage, ikke mere
+        for (const k of Object.keys(t).sort().slice(0, -30)) delete t[k];
+        await set({ tally: t, sidsteSide: { site, flagged: msg.flagged | 0, total: msg.total | 0 } });
+        svar({ ok: true });
         break;
       }
       case "c2paEnabled": {
@@ -384,6 +473,69 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
   return true;   // asynkront svar
 });
 
+// --- hoejreklik -----------------------------------------------------------
+// Den korteste vej fra "det her er forkert" til at der sker noget. Uden den skal
+// brugeren aabne popup en, forstaa hvad et 22-tegns-id er, og selv finde ud af
+// hvad der skal indberettes - altsaa sker der ingenting.
+
+const MENU_TILLAD = "noai-tillad";
+const MENU_MELD = "noai-meld";
+
+function tolkLink(url) {
+  if (!url) return null;
+  let m = /open\.spotify\.com\/artist\/([A-Za-z0-9]{22})/.exec(url);
+  if (m) return { kind: "spotify", id: m[1] };
+  m = /youtube\.com\/(@[^/?#]+)/.exec(url);
+  if (m) {
+    try { return { kind: "youtube", id: decodeURIComponent(m[1]).toLowerCase() }; }
+    catch (e) { return { kind: "youtube", id: m[1].toLowerCase() }; }
+  }
+  return null;
+}
+
+function byggMenuer() {
+  chrome.contextMenus.removeAll(() => {
+    const maal = {
+      contexts: ["link"],
+      targetUrlPatterns: ["*://open.spotify.com/artist/*", "*://*.youtube.com/@*"],
+    };
+    chrome.contextMenus.create({ id: MENU_TILLAD, title: "NoAI: never filter this", ...maal });
+    chrome.contextMenus.create({ id: MENU_MELD, title: "NoAI: report this as a mistake", ...maal });
+  });
+}
+
+chrome.contextMenus.onClicked.addListener(async (info) => {
+  const t = tolkLink(info.linkUrl);
+  if (!t) return;
+  if (info.menuItemId === MENU_TILLAD) {
+    const i = await indstillinger();
+    const liste = new Set(i.allowlist || []);
+    liste.add(t.id);
+    await set({ allowlist: [...liste] });
+    try {
+      await chrome.notifications.create("noai-allow-" + Date.now(), {
+        type: "basic", iconUrl: chrome.runtime.getURL("icons/icon128.png"),
+        title: "Never filtering this again",
+        message: t.id + " has been added to your allowlist.",
+      });
+    } catch (e) {}
+    return;
+  }
+  if (info.menuItemId === MENU_MELD) {
+    const krop = [
+      "**What is wrongly flagged**", "",
+      (t.kind === "youtube" ? "YouTube channel: " : "Spotify artist: ") + t.id, "",
+      "**Why it is wrong**", "",
+      "<!-- A sentence is enough. No proof is required. -->", "",
+      "---",
+      "Artists and channel owners can also write to noAI@h1tmakers.com.",
+      "We remove on request, without conditions, within six hours.",
+    ].join("\n");
+    await chrome.tabs.create({ url: "https://github.com/JayDK2/noai/issues/new?title=" +
+      encodeURIComponent("Wrongly flagged: " + t.id) + "&body=" + encodeURIComponent(krop) });
+  }
+});
+
 // --- livscyklus -----------------------------------------------------------
 // setInterval overlever ikke en MV3 service worker (den rives ned efter ~30 s
 // tomgang). chrome.alarms er den eneste der faktisk fyrer.
@@ -399,6 +551,7 @@ chrome.permissions.onRemoved.addListener(async () => {
 
 chrome.runtime.onInstalled.addListener(async () => {
   planlaeg();
+  byggMenuer();
   await opdatérC2paScript();                       // alarmen foerst - den maa aldrig kunne tabes
   try { await sikrListe(); } catch (e) {
     await set({ lastError: { when: new Date().toISOString(), msg: "seed: " + e.message } });
@@ -410,6 +563,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 chrome.runtime.onStartup.addListener(async () => {
   planlaeg();
+  byggMenuer();
   await opdatérC2paScript();
   await sikrListe();
   await sikrYtListe();

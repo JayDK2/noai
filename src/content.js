@@ -225,6 +225,27 @@
     return m ? m[1] : null;   // artist-sidens raekker har INGEN kunstner-links
   }
 
+  // Taelling. Kun to tal, aldrig en adresse eller en titel - og kun til brugeren
+  // selv. Vi tager den HOEJESTE vaerdi vi har set paa siden, ikke summen: hver
+  // mutation koerer rensRaekker igen, og en sum ville taelle det samme mange gange.
+  let taeltSti = "";
+  let hoejest = { flagged: 0, total: 0 };
+  let taelTimer = 0;
+
+  function taelOp(flagged, total) {
+    if (location.pathname !== taeltSti) {
+      taeltSti = location.pathname;
+      hoejest = { flagged: 0, total: 0 };
+    }
+    if (total <= hoejest.total && flagged <= hoejest.flagged) return;
+    const nyF = Math.max(flagged, hoejest.flagged) - hoejest.flagged;
+    const nyT = Math.max(total, hoejest.total) - hoejest.total;
+    hoejest = { flagged: Math.max(flagged, hoejest.flagged), total: Math.max(total, hoejest.total) };
+    if (!nyT && !nyF) return;
+    clearTimeout(taelTimer);
+    taelTimer = setTimeout(() => send({ type: "tally", site: "spotify", flagged: nyF, total: nyT }), 1200);
+  }
+
   function rensRaekker() {
     if (!state) return;
     const raekker = document.querySelectorAll(SEL.row);
@@ -270,6 +291,7 @@
         }
       } else if (!flag && mrk) { mrk.remove(); }
     }
+    taelOp([...raekker].filter((r) => r.classList.contains("noai-flagged")).length, raekker.length);
   }
 
   // --- selektor-selvtest -----------------------------------------------------

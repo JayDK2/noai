@@ -57,6 +57,20 @@ function tegn() {
 
   // Datoen paa DATAEN, ikke paa hentningen. Viser vi "i dag" fordi hentningen
   // lykkedes mod en frossen fil, lyver vi om hvor frisk listen er.
+  // Den lokale taelling. Tallet folk tager et skaermbillede af - og det staerkeste
+  // argument for at udvidelsen findes, regnet ud paa brugerens egen maskine.
+  const sp = state.sidsteSide;
+  $("m-page").textContent = sp && sp.total
+    ? sp.flagged + " of " + sp.total + " (" + Math.round(100 * sp.flagged / sp.total) + "%)"
+    : "—";
+  let f = 0, t = 0;
+  for (const dag of Object.values(state.tally || {}))
+    for (const v of Object.values(dag)) { f += v.flagged || 0; t += v.total || 0; }
+  $("m-30").textContent = t ? f.toLocaleString("en-US") + " of " + t.toLocaleString("en-US") +
+    " (" + Math.round(100 * f / t) + "%)" : "—";
+
+  tegnWatch();
+
   const d = state.listMeta.generated_at;
   $("m-date").textContent = d ? new Date(d).toISOString().slice(0, 10) : "unknown";
   $("m-source").textContent = (state.ytMeta && state.ytMeta.count)
@@ -157,7 +171,84 @@ async function opdaterRapportLink() {
   ].join("\n");
   a.href = base + "?title=" + encodeURIComponent("Wrongly flagged: " + hvem) +
            "&body=" + encodeURIComponent(krop);
-  a.textContent = "Report " + (hvem.length > 22 ? hvem.slice(0, 22) + "\u2026" : hvem);
+  // Kort etiket: den lange udgave braekkede bundlinjen over to linjer. Hvad der
+  // indberettes staar i selve sagen, ikke paa knappen.
+  a.textContent = "Report a mistake";
+  a.title = "Pre-filled with " + hvem;
 }
 
 opdaterRapportLink();
+
+// --- opslag ----------------------------------------------------------------
+// "Staar jeg paa en liste?" Der findes ikke noget sted i verden hvor man kan slaa
+// det op i dag. Alt sker lokalt - begge lister ligger allerede paa maskinen.
+
+function tegnWatch() {
+  const ul = $("watch");
+  ul.textContent = "";
+  const liste = state.watchlist || [];
+  $("watch-empty").hidden = liste.length > 0;
+  for (const w of liste) {
+    const li = document.createElement("li");
+    const c = document.createElement("code");
+    c.textContent = w.label || w.id;
+    const b = document.createElement("button");
+    b.textContent = "Stop";
+    b.onclick = async () => {
+      await send({ type: "setOption", key: "watchlist",
+                   value: liste.filter((x) => !(x.kind === w.kind && x.id === w.id)) });
+      indlaes();
+    };
+    li.append(c, b);
+    ul.append(li);
+  }
+}
+
+async function slaaOp() {
+  const ud = $("q-out");
+  const svar = await send({ type: "lookup", query: $("q").value });
+  ud.hidden = false;
+  ud.textContent = "";
+  if (!svar || !svar.ok) {
+    ud.textContent = "Not recognised. Paste a Spotify artist link, an ID, or a @handle.";
+    return;
+  }
+  const hvor = svar.kind === "youtube" ? "YouTube" : "Spotify";
+  const tekst = svar.tier === "none"
+    ? "Not on the " + hvor + " list."
+    : svar.tier === "warn"
+      ? "On the " + hvor + " warn list — marked only, never dimmed."
+      : "On the " + hvor + " block list — dimmed by default.";
+  const linje = document.createElement("div");
+  linje.className = svar.tier === "none" ? "none" : svar.tier;
+  linje.textContent = tekst;
+  const kilde = document.createElement("div");
+  kilde.style.color = "#8d8c8a";
+  kilde.style.marginTop = "3px";
+  kilde.textContent = svar.source + (svar.generated_at ? " · " + svar.generated_at.slice(0, 10) : "");
+  ud.append(linje, kilde);
+
+  if (svar.tier !== "none") {
+    const meld = document.createElement("div");
+    meld.style.color = "#8d8c8a";
+    meld.style.marginTop = "5px";
+    meld.textContent = "If this is wrong, write to noAI@h1tmakers.com — we remove on request, within six hours.";
+    ud.append(meld);
+  }
+
+  const b = document.createElement("button");
+  b.type = "button";
+  b.textContent = "Watch this";
+  b.onclick = async () => {
+    const liste = (state.watchlist || []).filter((x) => !(x.kind === svar.kind && x.id === svar.id));
+    liste.push({ kind: svar.kind, id: svar.id, label: svar.id });
+    await send({ type: "setOption", key: "watchlist", value: liste });
+    indlaes();
+    b.textContent = "Watching";
+    b.disabled = true;
+  };
+  ud.append(b);
+}
+
+$("q-go").addEventListener("click", slaaOp);
+$("q").addEventListener("keydown", (e) => { if (e.key === "Enter") slaaOp(); });
