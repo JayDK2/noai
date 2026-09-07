@@ -11,11 +11,11 @@
 .noai-c2pa-mark {
   position: fixed;
   display: none;
-  padding: 2px 7px;
+  padding: 2px 8px;
   border-radius: 0 0 3px 0;
   background: #0a0806;
   color: #ffb454;
-  font: 600 10px/1.6 ui-monospace, SFMono-Regular, Menlo, monospace;
+  font: 600 11.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
   letter-spacing: .05em;
   text-transform: uppercase;
   pointer-events: none;

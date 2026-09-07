@@ -40,8 +40,18 @@ function advarsel() {
   if (state.skipStopped)
     return "Stopped after " + state.skipStopped.after +
            " skips in a row. Use the player once to resume.";
-  if (state.lastError)
-    return "List update failed (" + state.lastError.msg + "). Still using the last good copy.";
+  // En roed alarm i seks timer for ét forbigaaende netvaerksudfald er stoej, og
+  // stoej laerer folk at ignorere vagten. Sig hvad der faktisk gaelder: mislykkedes
+  // forsoeget, men er listen frisk, er intet galt endnu.
+  if (state.lastError) {
+    const d = DAGE(state.listMeta.generated_at);
+    if (d !== null && d <= 2)
+      return "Last update attempt failed (" + state.lastError.msg +
+             "). The list is from " + state.listMeta.generated_at.slice(0, 10) +
+             " and is still current; it will try again shortly.";
+    return "List update failed (" + state.lastError.msg + "). Still using the last good copy" +
+           (d !== null ? ", now " + d + " days old" : "") + ".";
+  }
   if (state.ytError)
     return "YouTube list update failed (" + state.ytError.msg + "). Still using the last good copy.";
   // Regelfilen var den ene fejlkilde popup en ikke viste.
