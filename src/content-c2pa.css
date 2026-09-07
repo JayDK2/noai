@@ -1,10 +1,16 @@
-/* Maerket paa et billede med AI-erklaering. Skal kunne ses uden at oedelaegge
-   siden, og ordlyden skal goere klart at det er billedet der siger det. */
+/* Maerket paa et billede med AI-erklaering. Ligger i VORES eget lag oven paa
+   siden - vi skriver aldrig i sidens egne styles, for et position:relative paa
+   en fremmed beholder flytter alle dens absolut placerede boern. */
+#noai-c2pa-lag {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  pointer-events: none;
+}
+
 .noai-c2pa-mark {
-  position: absolute;
-  left: 0;
-  top: 0;
-  z-index: 2147482000;
+  position: fixed;
+  display: none;
   padding: 2px 7px;
   border-radius: 0 0 3px 0;
   background: #0a0806;
@@ -14,7 +20,7 @@
   text-transform: uppercase;
   pointer-events: none;
   white-space: nowrap;
-  max-width: 100%;
+  max-width: 90vw;
   overflow: hidden;
   text-overflow: ellipsis;
 }

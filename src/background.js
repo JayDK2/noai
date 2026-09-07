@@ -8,6 +8,8 @@
 //     Connect-enhed. Det kan browseren: tab.audible.
 //  2) Leder-valg mellem flere Spotify-faner. Samme spoergsmaal, samme svar.
 
+importScripts("/src/c2pa.js");
+
 const MIRROR_URL = "https://raw.githubusercontent.com/JayDK2/noai/main/blocklist.json";
 const MIRROR_YT  = "https://raw.githubusercontent.com/JayDK2/noai/main/youtube.json";
 const ALARM = "noai-refresh";
@@ -100,9 +102,16 @@ const c2paCache = new Map();
 const AI_KOMPOSIT = "compositeWithTrainedAlgorithmicMedia";
 const AI_HELT = "trainedAlgorithmicMedia";
 
+// To trin med vilje: foerst 256 KB for at se OM filen overhovedet baerer et
+// manifest (det gaelder de faerreste billeder), og kun ved traef hentes hele filen
+// og laeses rigtigt. Ét trin ville enten hente alt for meget eller afskaere store
+// manifester midt over.
+const C2PA_FULD_MAX = 12 * 1024 * 1024;
+
 async function c2paTjek(url) {
   if (c2paCache.has(url)) return c2paCache.get(url);
   let dom = "none";
+  let ekstra = null;
   let fejlede = false;
   try {
     // force-cache rammer browserens egen cache, saa vi som regel IKKE laver et
@@ -117,12 +126,32 @@ async function c2paTjek(url) {
     });
     if (r.ok || r.status === 206) {
       const buf = await r.arrayBuffer();
-      if (buf.byteLength <= C2PA_BYTES * 2) {
-        const tekst = new TextDecoder("latin1").decode(new Uint8Array(buf));
-        if (tekst.includes("jumdc2pa")) {
-          dom = tekst.includes(AI_KOMPOSIT) ? "ai-composite"
-              : tekst.includes(AI_HELT) ? "ai"
-              : tekst.includes("digitalCapture") ? "camera" : "credentials";
+      const tekst = new TextDecoder("latin1").decode(new Uint8Array(buf, 0, Math.min(buf.byteLength, C2PA_BYTES)));
+      if (tekst.includes("jumdc2pa")) {
+        // Der ER et manifest. Hent hele filen og laes den rigtigt - byte-soegning
+        // kan ikke skelne filens EGET krav fra en ingrediens, og et kamerabillede
+        // med én AI-genereret ting indsat ville ellers blive kaldt AI.
+        let hel = buf;
+        const cl = Number(r.headers.get("content-range") || "").valueOf();
+        if (buf.byteLength >= C2PA_BYTES) {
+          const r2 = await fetch(url, { cache: "force-cache", credentials: "omit", signal: afbryd.signal });
+          if (r2.ok) {
+            const b2 = await r2.arrayBuffer();
+            if (b2.byteLength <= C2PA_FULD_MAX) hel = b2;
+          }
+        }
+        try {
+          const a = self.NoAIC2PA.analyser(hel);
+          if (a.har) {
+            dom = a.dom;
+            ekstra = { ingrediensAI: !!a.ingrediensAI,
+                       generator: (a.aktivt && a.aktivt.generator) || null,
+                       kaede: a.kaede || [] };
+          } else { dom = "credentials"; }
+        } catch (e) {
+          // Kan manifestet ikke laeses, siger vi at der ER credentials - ikke at
+          // det er AI. Vi gaetter ikke paa noget vi ikke kunne afkode.
+          dom = "credentials";
         }
       }
     }
@@ -130,11 +159,12 @@ async function c2paTjek(url) {
   // En 429, en timeout eller et 403 (hotlink-vaern, udloebne signerede URL er) maa
   // IKKE cementeres som "ingen credentials" for workerens levetid. Vi cacher kun
   // rigtige svar.
+  const svar = { dom, ...(ekstra || {}) };
   if (!fejlede) {
     if (c2paCache.size >= C2PA_CACHE_MAX) c2paCache.delete(c2paCache.keys().next().value);
-    c2paCache.set(url, dom);
+    c2paCache.set(url, svar);
   }
-  return dom;
+  return svar;
 }
 
 const get = (k) => chrome.storage.local.get(k);
@@ -423,7 +453,7 @@ chrome.runtime.onMessage.addListener((msg, sender, svar) => {
           svar({ verdict: "none" });
           break;
         }
-        svar({ verdict: await c2paTjek(msg.url) });
+        svar(await c2paTjek(msg.url));
         break;
       }
       case "ytState": {

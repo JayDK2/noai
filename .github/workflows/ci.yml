@@ -13,3 +13,5 @@ jobs:
         run: for f in src/*.js; do node --check "$f"; done
       - name: Statisk kontrol
         run: node tools/check.mjs
+      - name: C2PA-laeser mod rigtige fixtures
+        run: node tools/test_c2pa.mjs
